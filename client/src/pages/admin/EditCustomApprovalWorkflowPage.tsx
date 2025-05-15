@@ -4,7 +4,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getCustomApprovalWorkflowById, updateCustomApprovalWorkflow } from "../../services/customApprovalWorkflowService";
 import { getAllDepartments } from "../../services/departmentService";
-import { getAllPositions } from "../../services/positionService";
+import { getAllPositions, getAssignedPositionsByDepartment } from "../../services/positionService";
 import { getAllTopLevelPositions } from "../../services/topLevelPositionService";
 import { getAllLeaveCategories } from "../../services/leaveCategoryService";
 
@@ -33,39 +33,6 @@ export default function EditCustomApprovalWorkflowPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const { data: workflow, isLoading: isLoadingWorkflow } = useQuery({
-    queryKey: ["customWorkflow", id],
-    queryFn: () => getCustomApprovalWorkflowById(id as string),
-    enabled: !!id,
-  });
-
-  const { data: departments = [] } = useQuery({
-    queryKey: ["departments"],
-    queryFn: () => getAllDepartments(),
-  });
-
-  const { data: positions = [] } = useQuery({
-    queryKey: ["positions"],
-    queryFn: () => getAllPositions(),
-  });
-  
-  // Get positions filtered by department
-  const { data: departmentPositions = [] } = useQuery({
-    queryKey: ["positions", watchDepartmentId],
-    queryFn: () => getAllPositions({ departmentId: watchDepartmentId }),
-    enabled: !!watchDepartmentId,
-  });
-
-  const { data: topLevelPositions = [] } = useQuery({
-    queryKey: ["topLevelPositions"],
-    queryFn: () => getAllTopLevelPositions(),
-  });
-  
-  const { data: leaveCategories = [] } = useQuery({
-    queryKey: ["leaveCategories"],
-    queryFn: () => getAllLeaveCategories(),
-  });
-
   const {
     register,
     control,
@@ -88,6 +55,51 @@ export default function EditCustomApprovalWorkflowPage() {
       isDefault: false,
       approvalLevels: [{ level: 1, positionId: "", departmentId: "", isRequired: true }],
     },
+  });
+
+  const watchApprovalLevels = watch("approvalLevels");
+  const watchCategory = watch("category");
+  const watchLeaveCategory = watch("leaveCategoryId");
+  const watchDepartmentId = watch("departmentId");
+
+  const { data: workflow, isLoading: isLoadingWorkflow } = useQuery({
+    queryKey: ["customWorkflow", id],
+    queryFn: () => getCustomApprovalWorkflowById(id as string),
+    enabled: !!id,
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => getAllDepartments(),
+  });
+
+  const { data: positions = [] } = useQuery({
+    queryKey: ["positions"],
+    queryFn: () => getAllPositions(),
+  });
+  
+  // Get positions filtered by department
+  const { data: departmentPositions = [], refetch: refetchDepartmentPositions } = useQuery({
+    queryKey: ["positions", watchDepartmentId],
+    queryFn: () => getAllPositions({ departmentId: watchDepartmentId }),
+    enabled: !!watchDepartmentId,
+  });
+  
+  // Get positions that are actually assigned to users in this department
+  const { data: assignedPositions = [], refetch: refetchAssignedPositions } = useQuery({
+    queryKey: ["assignedPositions", watchDepartmentId],
+    queryFn: () => getAssignedPositionsByDepartment(watchDepartmentId),
+    enabled: !!watchDepartmentId,
+  });
+
+  const { data: topLevelPositions = [] } = useQuery({
+    queryKey: ["topLevelPositions"],
+    queryFn: () => getAllTopLevelPositions(),
+  });
+  
+  const { data: leaveCategories = [] } = useQuery({
+    queryKey: ["leaveCategories"],
+    queryFn: () => getAllLeaveCategories(),
   });
 
   const { fields, append, remove, replace } = useFieldArray({
@@ -118,11 +130,6 @@ export default function EditCustomApprovalWorkflowPage() {
       setIsLoading(false);
     }
   }, [workflow, isLoadingWorkflow, reset]);
-
-  const watchApprovalLevels = watch("approvalLevels");
-  const watchCategory = watch("category");
-  const watchLeaveCategory = watch("leaveCategoryId");
-  const watchDepartmentId = watch("departmentId");
   
   // Update min/max days when a leave category is selected
   useEffect(() => {
@@ -134,6 +141,22 @@ export default function EditCustomApprovalWorkflowPage() {
       }
     }
   }, [watchLeaveCategory, leaveCategories, setValue]);
+  
+  // Reset main position when department changes
+  useEffect(() => {
+    // Reset position when department changes
+    setValue("positionId", "");
+    
+    // Ensure department positions are refreshed
+    if (watchDepartmentId) {
+      if (refetchDepartmentPositions) {
+        refetchDepartmentPositions();
+      }
+      if (refetchAssignedPositions) {
+        refetchAssignedPositions();
+      }
+    }
+  }, [watchDepartmentId, setValue, refetchDepartmentPositions, refetchAssignedPositions]);
   
   // Update approval levels department when main department changes
   useEffect(() => {
@@ -147,9 +170,16 @@ export default function EditCustomApprovalWorkflowPage() {
       // Update each approval level
       updatedApprovalLevels.forEach((level, index) => {
         setValue(`approvalLevels.${index}.departmentId`, watchDepartmentId);
+        // Reset position selection when department changes
+        setValue(`approvalLevels.${index}.positionId`, "");
       });
+      
+      // Ensure assigned positions are refreshed
+      if (refetchAssignedPositions) {
+        refetchAssignedPositions();
+      }
     }
-  }, [watchDepartmentId, setValue, watchApprovalLevels]);
+  }, [watchDepartmentId, setValue, watchApprovalLevels, refetchAssignedPositions]);
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => updateCustomApprovalWorkflow(id as string, data),
@@ -343,18 +373,42 @@ export default function EditCustomApprovalWorkflowPage() {
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
             >
               <option value="">All Positions</option>
-              {watchDepartmentId 
-                ? departmentPositions.map((position: any) => (
+              
+              {/* When department is selected */}
+              {watchDepartmentId ? (
+                <>
+                  {/* Positions assigned to users */}
+                  {assignedPositions.length > 0 && (
+                    <optgroup label="Regular Positions Available">
+                      {assignedPositions.map((position: any) => (
+                        <option key={position.id} value={position.id}>
+                          {position.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  
+                  {/* All positions in department */}
+                  {departmentPositions.length > 0 && (
+                    <optgroup label="All Department Positions">
+                      {departmentPositions.map((position: any) => (
+                        <option key={position.id} value={position.id}>
+                          {position.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </>
+              ) : (
+                /* When no department is selected */
+                <optgroup label="All Positions">
+                  {positions.map((position: any) => (
                     <option key={position.id} value={position.id}>
-                      {position.name}
+                      {position.name} {position.departmentName ? `(${position.departmentName})` : ''}
                     </option>
-                  ))
-                : positions.map((position: any) => (
-                    <option key={position.id} value={position.id}>
-                      {position.name}
-                    </option>
-                  ))
-              }
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         </div>
@@ -435,7 +489,6 @@ export default function EditCustomApprovalWorkflowPage() {
                       <option 
                         key={department.id} 
                         value={department.id}
-                        selected={watchDepartmentId === department.id}
                       >
                         {department.name}
                       </option>
@@ -462,22 +515,56 @@ export default function EditCustomApprovalWorkflowPage() {
                         ))}
                       </optgroup>
                     )}
-                    <optgroup label="Regular Positions">
-                      {watchApprovalLevels[index]?.departmentId
-                        ? positions
+                    {watchApprovalLevels[index]?.departmentId && watchApprovalLevels[index].departmentId === watchDepartmentId && (
+                      <>
+                        {assignedPositions.length > 0 && (
+                          <optgroup label="Regular Positions Available">
+                            {assignedPositions.map((position: any) => (
+                              <option key={position.id} value={position.id}>
+                                {position.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="All Department Positions">
+                          {departmentPositions.length > 0 ? (
+                            departmentPositions.map((position: any) => (
+                              <option key={position.id} value={position.id}>
+                                {position.name}
+                              </option>
+                            ))
+                          ) : (
+                            positions
+                              .filter((pos: any) => pos.departmentId === watchApprovalLevels[index].departmentId)
+                              .map((position: any) => (
+                                <option key={position.id} value={position.id}>
+                                  {position.name}
+                                </option>
+                              ))
+                          )}
+                        </optgroup>
+                      </>
+                    )}
+                    
+                    {(!watchApprovalLevels[index]?.departmentId || watchApprovalLevels[index].departmentId !== watchDepartmentId) && (
+                      <optgroup label="Regular Positions">
+                        {watchApprovalLevels[index]?.departmentId ? (
+                          positions
                             .filter((pos: any) => pos.departmentId === watchApprovalLevels[index].departmentId)
                             .map((position: any) => (
                               <option key={position.id} value={position.id}>
                                 {position.name}
                               </option>
                             ))
-                        : positions.map((position: any) => (
+                        ) : (
+                          positions.map((position: any) => (
                             <option key={position.id} value={position.id}>
-                              {position.name}
+                              {position.name} {position.departmentName ? `(${position.departmentName})` : ''}
                             </option>
                           ))
-                      }
-                    </optgroup>
+                        )}
+                      </optgroup>
+                    )}
                   </select>
                   {errors.approvalLevels?.[index]?.positionId && (
                     <p className="text-red-500 text-xs italic">

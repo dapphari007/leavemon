@@ -73,3 +73,30 @@ export const updatePosition = async (
 export const deletePosition = async (id: string): Promise<void> => {
   await del(`/positions/${id}`);
 };
+
+// Get positions that are assigned to users in a specific department
+export const getAssignedPositionsByDepartment = async (
+  departmentId: string
+): Promise<Position[]> => {
+  // First get all users
+  const usersResponse = await get<{ users: any[]; count: number }>("/users");
+  const users = usersResponse.users || [];
+  
+  // Filter users by department and get unique position IDs
+  const positionIds = [...new Set(
+    users
+      .filter(user => user.department === departmentId && user.position)
+      .map(user => user.position)
+  )];
+  
+  // If no positions found, return empty array
+  if (positionIds.length === 0) {
+    return [];
+  }
+  
+  // Get all positions
+  const allPositions = await getAllPositions();
+  
+  // Filter positions by the IDs we found
+  return allPositions.filter(position => positionIds.includes(position.id));
+};
