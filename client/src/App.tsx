@@ -76,6 +76,7 @@ import EditPositionPage from "./pages/admin/EditPositionPage";
 import LeaveCategoriesPage from "./pages/admin/LeaveCategoriesPage";
 import CreateLeaveCategoryPage from "./pages/admin/CreateLeaveCategoryPage";
 import EditLeaveCategoryPage from "./pages/admin/EditLeaveCategoryPage";
+import SystemMaintenancePage from "./pages/admin/SystemMaintenancePage";
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -232,6 +233,14 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute allowedRoles={["super_admin"]}>
         <SuperAdminDashboardPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/system-maintenance",
+    element: (
+      <ProtectedRoute allowedRoles={["super_admin"]}>
+        <SystemMaintenancePage />
       </ProtectedRoute>
     ),
   },

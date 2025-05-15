@@ -95,6 +95,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     { name: "Roles", href: "/roles", icon: UserGroupIcon },
     { name: "Departments", href: "/departments", icon: BuildingOfficeIcon },
     { name: "Positions", href: "/positions", icon: BriefcaseIcon },
+    { name: "System Maintenance", href: "/system-maintenance", icon: BuildingOfficeIcon },
   ];
 
   const handleLogout = () => {
