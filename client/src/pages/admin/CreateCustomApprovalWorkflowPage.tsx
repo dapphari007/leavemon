@@ -1,16 +1,18 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useForm, useFieldArray } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createCustomApprovalWorkflow } from "../../services/customApprovalWorkflowService";
 import { getAllDepartments } from "../../services/departmentService";
 import { getAllPositions } from "../../services/positionService";
 import { getAllTopLevelPositions } from "../../services/topLevelPositionService";
+import { getAllLeaveCategories } from "../../services/leaveCategoryService";
 
 type FormValues = {
   name: string;
   description: string;
   category: string;
+  leaveCategoryId: string;
   minDays: number;
   maxDays: number;
   departmentId: string;
@@ -29,32 +31,19 @@ export default function CreateCustomApprovalWorkflowPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
-  const { data: departments = [] } = useQuery({
-    queryKey: ["departments"],
-    queryFn: () => getAllDepartments(),
-  });
-
-  const { data: positions = [] } = useQuery({
-    queryKey: ["positions"],
-    queryFn: () => getAllPositions(),
-  });
-
-  const { data: topLevelPositions = [] } = useQuery({
-    queryKey: ["topLevelPositions"],
-    queryFn: () => getAllTopLevelPositions(),
-  });
-
   const {
     register,
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
       name: "",
       description: "",
-      category: "short_leave",
+      category: "short_leave", // For backward compatibility
+      leaveCategoryId: "",
       minDays: 0.5,
       maxDays: 2,
       departmentId: "",
@@ -65,13 +54,69 @@ export default function CreateCustomApprovalWorkflowPage() {
     },
   });
 
+  const watchApprovalLevels = watch("approvalLevels");
+  const watchCategory = watch("category");
+  const watchLeaveCategory = watch("leaveCategoryId");
+  const watchDepartmentId = watch("departmentId");
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => getAllDepartments(),
+  });
+
+  const { data: positions = [] } = useQuery({
+    queryKey: ["positions"],
+    queryFn: () => getAllPositions(),
+  });
+  
+  // Get positions filtered by department
+  const { data: departmentPositions = [] } = useQuery({
+    queryKey: ["positions", watchDepartmentId],
+    queryFn: () => getAllPositions({ departmentId: watchDepartmentId }),
+    enabled: !!watchDepartmentId,
+  });
+
+  const { data: topLevelPositions = [] } = useQuery({
+    queryKey: ["topLevelPositions"],
+    queryFn: () => getAllTopLevelPositions(),
+  });
+  
+  const { data: leaveCategories = [] } = useQuery({
+    queryKey: ["leaveCategories"],
+    queryFn: () => getAllLeaveCategories(),
+  });
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "approvalLevels",
   });
 
-  const watchApprovalLevels = watch("approvalLevels");
-  const watchCategory = watch("category");
+  // Update min/max days when a leave category is selected
+  useEffect(() => {
+    if (watchLeaveCategory) {
+      const selectedCategory = leaveCategories.find((cat: any) => cat.id === watchLeaveCategory);
+      if (selectedCategory) {
+        setValue("minDays", selectedCategory.defaultMinDays);
+        setValue("maxDays", selectedCategory.defaultMaxDays);
+      }
+    }
+  }, [watchLeaveCategory, leaveCategories, setValue]);
+  
+  // Update approval levels department when main department changes
+  useEffect(() => {
+    if (watchDepartmentId) {
+      // Update all approval levels to use the selected department
+      const updatedApprovalLevels = watchApprovalLevels.map(level => ({
+        ...level,
+        departmentId: watchDepartmentId
+      }));
+      
+      // Update each approval level
+      updatedApprovalLevels.forEach((level, index) => {
+        setValue(`approvalLevels.${index}.departmentId`, watchDepartmentId);
+      });
+    }
+  }, [watchDepartmentId, setValue, watchApprovalLevels]);
 
   const createMutation = useMutation({
     mutationFn: createCustomApprovalWorkflow,
@@ -95,7 +140,8 @@ export default function CreateCustomApprovalWorkflowPage() {
     createMutation.mutate({
       name: data.name,
       description: data.description,
-      category: data.category,
+      category: data.category, // Keep for backward compatibility
+      leaveCategoryId: data.leaveCategoryId || null,
       minDays: data.minDays,
       maxDays: data.maxDays,
       departmentId: data.departmentId || null,
@@ -107,6 +153,15 @@ export default function CreateCustomApprovalWorkflowPage() {
   };
 
   const addApprovalLevel = () => {
+    // Check if we've reached the maximum approval levels for the selected category
+    if (watchLeaveCategory) {
+      const selectedCategory = leaveCategories.find((cat: any) => cat.id === watchLeaveCategory);
+      if (selectedCategory && fields.length >= selectedCategory.maxApprovalLevels) {
+        setError(`Maximum of ${selectedCategory.maxApprovalLevels} approval levels allowed for this category`);
+        return;
+      }
+    }
+    
     append({
       level: fields.length + 1,
       positionId: "",
@@ -159,22 +214,30 @@ export default function CreateCustomApprovalWorkflowPage() {
             Leave Category *
           </label>
           <select
-            {...register("category", { required: "Category is required" })}
+            {...register("leaveCategoryId", { required: "Leave category is required" })}
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
           >
-            <option value="short_leave">Short Leave (0.5-2 days)</option>
-            <option value="medium_leave">Medium Leave (3-6 days)</option>
-            <option value="long_leave">Long Leave (7+ days)</option>
+            <option value="">Select a leave category</option>
+            {leaveCategories.map((category: any) => (
+              <option key={category.id} value={category.id}>
+                {category.name} ({category.defaultMinDays}-{category.defaultMaxDays} days)
+              </option>
+            ))}
           </select>
-          {errors.category && (
-            <p className="text-red-500 text-xs italic">{errors.category.message}</p>
+          {errors.leaveCategoryId && (
+            <p className="text-red-500 text-xs italic">{errors.leaveCategoryId.message}</p>
           )}
+          <p className="text-xs text-gray-500 mt-1">
+            <Link to="/admin/leave-categories" className="text-blue-500 hover:underline">
+              Manage leave categories
+            </Link>
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Minimum Days *
+              Minimum Days (Auto-set from category)
             </label>
             <input
               {...register("minDays", { 
@@ -184,7 +247,8 @@ export default function CreateCustomApprovalWorkflowPage() {
               type="number"
               step="0.5"
               min="0.5"
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              disabled={!!watchLeaveCategory}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline bg-gray-100"
             />
             {errors.minDays && (
               <p className="text-red-500 text-xs italic">{errors.minDays.message}</p>
@@ -192,7 +256,7 @@ export default function CreateCustomApprovalWorkflowPage() {
           </div>
           <div>
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Maximum Days *
+              Maximum Days (Auto-set from category)
             </label>
             <input
               {...register("maxDays", { 
@@ -203,7 +267,8 @@ export default function CreateCustomApprovalWorkflowPage() {
               type="number"
               step="0.5"
               min="0.5"
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              disabled={!!watchLeaveCategory}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline bg-gray-100"
             />
             {errors.maxDays && (
               <p className="text-red-500 text-xs italic">{errors.maxDays.message}</p>
@@ -237,11 +302,18 @@ export default function CreateCustomApprovalWorkflowPage() {
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
             >
               <option value="">All Positions</option>
-              {positions.map((position: any) => (
-                <option key={position.id} value={position.id}>
-                  {position.name}
-                </option>
-              ))}
+              {watchDepartmentId 
+                ? departmentPositions.map((position: any) => (
+                    <option key={position.id} value={position.id}>
+                      {position.name}
+                    </option>
+                  ))
+                : positions.map((position: any) => (
+                    <option key={position.id} value={position.id}>
+                      {position.name}
+                    </option>
+                  ))
+              }
             </select>
           </div>
         </div>
@@ -273,13 +345,21 @@ export default function CreateCustomApprovalWorkflowPage() {
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold">Approval Levels</h3>
-            <button
-              type="button"
-              onClick={addApprovalLevel}
-              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
-            >
-              Add Level
-            </button>
+            <div>
+              {watchLeaveCategory && (
+                <span className="text-sm text-gray-600 mr-2">
+                  {fields.length} / {leaveCategories.find((cat: any) => cat.id === watchLeaveCategory)?.maxApprovalLevels || "∞"} levels
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={addApprovalLevel}
+                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                disabled={!watchLeaveCategory}
+              >
+                Add Level
+              </button>
+            </div>
           </div>
 
           {fields.map((field, index) => (
@@ -311,7 +391,11 @@ export default function CreateCustomApprovalWorkflowPage() {
                   >
                     <option value="">Any Department</option>
                     {departments.map((department: any) => (
-                      <option key={department.id} value={department.id}>
+                      <option 
+                        key={department.id} 
+                        value={department.id}
+                        selected={watchDepartmentId === department.id}
+                      >
                         {department.name}
                       </option>
                     ))}
@@ -338,11 +422,20 @@ export default function CreateCustomApprovalWorkflowPage() {
                       </optgroup>
                     )}
                     <optgroup label="Regular Positions">
-                      {positions.map((position: any) => (
-                        <option key={position.id} value={position.id}>
-                          {position.name}
-                        </option>
-                      ))}
+                      {watchApprovalLevels[index]?.departmentId
+                        ? positions
+                            .filter((pos: any) => pos.departmentId === watchApprovalLevels[index].departmentId)
+                            .map((position: any) => (
+                              <option key={position.id} value={position.id}>
+                                {position.name}
+                              </option>
+                            ))
+                        : positions.map((position: any) => (
+                            <option key={position.id} value={position.id}>
+                              {position.name}
+                            </option>
+                          ))
+                      }
                     </optgroup>
                   </select>
                   {errors.approvalLevels?.[index]?.positionId && (

@@ -6,6 +6,7 @@ export * from "./LeaveRequest";
 export * from "./Holiday";
 export * from "./ApprovalWorkflow";
 export * from "./CustomApprovalWorkflow";
+export * from "./LeaveCategory";
 export * from "./TopLevelPosition";
 export * from "./Role";
 export * from "./Department";

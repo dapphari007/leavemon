@@ -9,7 +9,9 @@ import {
 } from "typeorm";
 import { Department } from "./Department";
 import { Position } from "./Position";
+import { LeaveCategory } from "./LeaveCategory";
 
+// Keep for backward compatibility
 export enum ApprovalCategory {
   SHORT_LEAVE = "short_leave",
   MEDIUM_LEAVE = "medium_leave",
@@ -31,8 +33,16 @@ export class CustomApprovalWorkflow {
     type: "enum",
     enum: ApprovalCategory,
     enumName: "approval_category_enum",
+    nullable: true,
   })
   category: ApprovalCategory;
+  
+  @Column({ nullable: true })
+  leaveCategoryId: string;
+
+  @ManyToOne(() => LeaveCategory, category => category.workflows, { nullable: true })
+  @JoinColumn({ name: "leaveCategoryId" })
+  leaveCategory: LeaveCategory;
 
   @Column({ type: "float" })
   minDays: number;

@@ -378,7 +378,7 @@ export default function EditCustomApprovalWorkflowPage() {
               className="mr-2 h-5 w-5"
             />
             <span className="text-gray-700">
-              Default Workflow (will be used as the default for this category)
+              Default Workflow (will be used when no specific workflow matches a leave request)
             </span>
           </div>
         </div>
@@ -403,14 +403,20 @@ export default function EditCustomApprovalWorkflowPage() {
             </div>
           </div>
 
+          {fields.length === 0 && (
+            <div className="text-center py-4 text-gray-500">
+              No approval levels defined. Click "Add Level" to add one.
+            </div>
+          )}
+
           {fields.map((field, index) => (
             <div
               key={field.id}
-              className="border rounded-lg p-4 mb-4 bg-gray-50"
+              className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-200"
             >
-              <div className="flex justify-between items-center mb-3">
+              <div className="flex justify-between items-center mb-4">
                 <h4 className="font-medium">Level {index + 1}</h4>
-                {fields.length > 1 && (
+                {index > 0 && (
                   <button
                     type="button"
                     onClick={() => remove(index)}
@@ -421,7 +427,7 @@ export default function EditCustomApprovalWorkflowPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-gray-700 text-sm font-bold mb-2">
                     Department (Optional)
@@ -442,6 +448,7 @@ export default function EditCustomApprovalWorkflowPage() {
                     ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-gray-700 text-sm font-bold mb-2">
                     Position *
@@ -481,44 +488,34 @@ export default function EditCustomApprovalWorkflowPage() {
                   </select>
                   {errors.approvalLevels?.[index]?.positionId && (
                     <p className="text-red-500 text-xs italic">
-                      Position is required
+                      {errors.approvalLevels[index]?.positionId?.message}
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center mt-2">
-                <input
-                  type="checkbox"
-                  {...register(`approvalLevels.${index}.isRequired`)}
-                  className="mr-2"
-                />
-                <span className="text-gray-700 text-sm">
-                  Required Approval (cannot be skipped)
-                </span>
+              <div className="mt-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    {...register(`approvalLevels.${index}.isRequired`)}
+                    className="mr-2 h-5 w-5"
+                    defaultChecked={true}
+                  />
+                  <span className="text-gray-700">
+                    Required (if unchecked, this level can be skipped if approver is not available)
+                  </span>
+                </label>
               </div>
             </div>
           ))}
-
-          {fields.length === 0 && (
-            <div className="text-center py-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-600">No approval levels added yet.</p>
-              <button
-                type="button"
-                onClick={addApprovalLevel}
-                className="mt-2 text-blue-600 hover:underline"
-              >
-                Add your first level
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="flex justify-end space-x-4">
+        <div className="flex justify-between">
           <button
             type="button"
             onClick={() => navigate("/approval-workflow-customization")}
-            className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+            className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
           >
             Cancel
           </button>
@@ -527,7 +524,7 @@ export default function EditCustomApprovalWorkflowPage() {
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
             disabled={updateMutation.isPending}
           >
-            {updateMutation.isPending ? "Updating..." : "Update Workflow"}
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </form>

@@ -68,6 +68,7 @@ export const createCustomApprovalWorkflow = async (
       name, 
       description, 
       category, 
+      leaveCategoryId,
       minDays, 
       maxDays, 
       departmentId, 
@@ -80,14 +81,14 @@ export const createCustomApprovalWorkflow = async (
     // Validate input
     if (
       !name ||
-      !category ||
+      (!category && !leaveCategoryId) ||
       minDays === undefined ||
       maxDays === undefined ||
       !approvalLevels
     ) {
       return h
         .response({
-          message: "Name, category, minDays, maxDays, and approvalLevels are required",
+          message: "Name, category or leaveCategoryId, minDays, maxDays, and approvalLevels are required",
         })
         .code(400);
     }
@@ -190,7 +191,8 @@ export const createCustomApprovalWorkflow = async (
     const customApprovalWorkflow = new CustomApprovalWorkflow();
     customApprovalWorkflow.name = name;
     customApprovalWorkflow.description = description || null;
-    customApprovalWorkflow.category = category;
+    customApprovalWorkflow.category = category; // Keep for backward compatibility
+    customApprovalWorkflow.leaveCategoryId = leaveCategoryId || null;
     customApprovalWorkflow.minDays = minDays;
     customApprovalWorkflow.maxDays = maxDays;
     customApprovalWorkflow.departmentId = departmentId || null;
@@ -251,7 +253,7 @@ export const getAllCustomApprovalWorkflows = async (
     // Get custom approval workflows
     const customApprovalWorkflows = await customApprovalWorkflowRepository.find({
       where: query,
-      relations: ["department", "position"],
+      relations: ["department", "position", "leaveCategory"],
       order: {
         category: "ASC",
         minDays: "ASC",
@@ -286,7 +288,7 @@ export const getCustomApprovalWorkflowById = async (
     const customApprovalWorkflowRepository = AppDataSource.getRepository(CustomApprovalWorkflow);
     const customApprovalWorkflow = await customApprovalWorkflowRepository.findOne({
       where: { id },
-      relations: ["department", "position"],
+      relations: ["department", "position", "leaveCategory"],
     });
 
     if (!customApprovalWorkflow) {
@@ -319,6 +321,7 @@ export const updateCustomApprovalWorkflow = async (
       name, 
       description, 
       category, 
+      leaveCategoryId,
       minDays, 
       maxDays, 
       departmentId, 
@@ -381,9 +384,10 @@ export const updateCustomApprovalWorkflow = async (
       }
     }
 
-    // Check for overlapping workflows if changing category, min/max days, department, or position
+    // Check for overlapping workflows if changing category, leaveCategoryId, min/max days, department, or position
     if (
       (category !== undefined && category !== customApprovalWorkflow.category) ||
+      (leaveCategoryId !== undefined && leaveCategoryId !== customApprovalWorkflow.leaveCategoryId) ||
       (minDays !== undefined && minDays !== customApprovalWorkflow.minDays) ||
       (maxDays !== undefined && maxDays !== customApprovalWorkflow.maxDays) ||
       (departmentId !== undefined && departmentId !== customApprovalWorkflow.departmentId) ||
@@ -451,6 +455,7 @@ export const updateCustomApprovalWorkflow = async (
     if (name) customApprovalWorkflow.name = name;
     if (description !== undefined) customApprovalWorkflow.description = description;
     if (category) customApprovalWorkflow.category = category;
+    if (leaveCategoryId !== undefined) customApprovalWorkflow.leaveCategoryId = leaveCategoryId;
     if (minDays !== undefined) customApprovalWorkflow.minDays = minDays;
     if (maxDays !== undefined) customApprovalWorkflow.maxDays = maxDays;
     if (departmentId !== undefined) customApprovalWorkflow.departmentId = departmentId;

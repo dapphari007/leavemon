@@ -6,6 +6,7 @@ import * as leaveRequestService from "./leaveRequestService";
 import * as holidayService from "./holidayService";
 import * as approvalWorkflowService from "./approvalWorkflowService";
 import * as dashboardService from "./dashboardService";
+import * as leaveCategoryService from "./leaveCategoryService";
 
 export {
   authService,
@@ -16,4 +17,5 @@ export {
   holidayService,
   approvalWorkflowService,
   dashboardService,
+  leaveCategoryService,
 };

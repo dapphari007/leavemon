@@ -73,6 +73,9 @@ import EditDepartmentPage from "./pages/admin/EditDepartmentPage";
 import PositionsPage from "./pages/admin/PositionsPage";
 import CreatePositionPage from "./pages/admin/CreatePositionPage";
 import EditPositionPage from "./pages/admin/EditPositionPage";
+import LeaveCategoriesPage from "./pages/admin/LeaveCategoriesPage";
+import CreateLeaveCategoryPage from "./pages/admin/CreateLeaveCategoryPage";
+import EditLeaveCategoryPage from "./pages/admin/EditLeaveCategoryPage";
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -261,6 +264,30 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute allowedRoles={["super_admin"]}>
         <TopLevelPositionsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/admin/leave-categories",
+    element: (
+      <ProtectedRoute allowedRoles={["super_admin"]}>
+        <LeaveCategoriesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/admin/leave-categories/create",
+    element: (
+      <ProtectedRoute allowedRoles={["super_admin"]}>
+        <CreateLeaveCategoryPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/admin/leave-categories/edit/:id",
+    element: (
+      <ProtectedRoute allowedRoles={["super_admin"]}>
+        <EditLeaveCategoryPage />
       </ProtectedRoute>
     ),
   },

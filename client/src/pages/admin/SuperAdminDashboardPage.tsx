@@ -244,7 +244,7 @@ const SuperAdminDashboardPage: React.FC = () => {
           <p className="text-gray-600 mb-4">
             As a SuperAdmin, you can customize the approval workflow for different leave categories and departments.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link to="/approval-workflow-customization">
               <Button 
                 fullWidth 
@@ -253,6 +253,16 @@ const SuperAdminDashboardPage: React.FC = () => {
               >
                 <FaClipboardCheck className="h-5 w-5" />
                 <span>Customize Approval Workflow</span>
+              </Button>
+            </Link>
+            <Link to="/admin/leave-categories">
+              <Button 
+                fullWidth 
+                variant="primary"
+                className="flex items-center justify-center gap-2"
+              >
+                <FaCalendarAlt className="h-5 w-5" />
+                <span>Manage Leave Categories</span>
               </Button>
             </Link>
             <Link to="/top-level-positions">

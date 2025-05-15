@@ -7,6 +7,7 @@ import leaveRequestRoutes from "./leaveRequestRoutes";
 import holidayRoutes from "./holidayRoutes";
 import approvalWorkflowRoutes from "./approvalWorkflowRoutes";
 import customApprovalWorkflowRoutes from "./customApprovalWorkflowRoutes";
+import leaveCategoryRoutes from "./leaveCategoryRoutes";
 import topLevelPositionRoutes from "./topLevelPositionRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import roleRoutes from "./roleRoutes";
@@ -25,6 +26,7 @@ export const registerRoutes = (server: Server): void => {
     ...holidayRoutes,
     ...approvalWorkflowRoutes,
     ...customApprovalWorkflowRoutes,
+    ...leaveCategoryRoutes,
     ...topLevelPositionRoutes,
     ...dashboardRoutes,
     ...roleRoutes,
