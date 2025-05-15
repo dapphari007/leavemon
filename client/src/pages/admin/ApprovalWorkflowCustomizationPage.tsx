@@ -5,7 +5,7 @@ import { getAllCustomApprovalWorkflows, initializeDefaultCustomApprovalWorkflows
 import { getAllDepartments } from "../../services/departmentService";
 import { getAllPositions } from "../../services/positionService";
 import { getAllTopLevelPositions } from "../../services/topLevelPositionService";
-import { FaEdit, FaTrash, FaPlus, FaSync } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaSync, FaInfoCircle } from "react-icons/fa";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { deleteCustomApprovalWorkflow } from "../../services/customApprovalWorkflowService";
 
@@ -17,6 +17,7 @@ export default function ApprovalWorkflowCustomizationPage() {
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isHardcodedWorkflowEnabled, setIsHardcodedWorkflowEnabled] = useState<boolean>(true);
 
   const { data: customWorkflows = [], isLoading: isLoadingWorkflows } = useQuery({
     queryKey: ["customWorkflows", selectedCategory, selectedDepartment, selectedPosition],
@@ -195,6 +196,127 @@ export default function ApprovalWorkflowCustomizationPage() {
         </div>
       </div>
 
+      {/* Hardcoded Workflow Section */}
+      <div className="bg-white shadow-md rounded-lg p-6 mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">Hardcoded Position-Based Approval Workflow</h2>
+          <div className="flex items-center">
+            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${isHardcodedWorkflowEnabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} mr-3`}>
+              {isHardcodedWorkflowEnabled ? 'Active' : 'Inactive'}
+            </span>
+            <label className="inline-flex items-center cursor-pointer">
+              <span className="mr-2 text-sm font-medium text-gray-700">Enable</span>
+              <div className="relative">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={isHardcodedWorkflowEnabled}
+                  onChange={() => {
+                    setIsHardcodedWorkflowEnabled(!isHardcodedWorkflowEnabled);
+                    if (isHardcodedWorkflowEnabled) {
+                      setSuccess("Note: Disabling the hardcoded workflow requires code changes. This toggle is for demonstration purposes only.");
+                      setTimeout(() => setSuccess(null), 5000);
+                    }
+                  }}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </div>
+            </label>
+          </div>
+        </div>
+        
+        <div className="mb-4">
+          <p className="text-gray-700 mb-2">
+            This system is currently using a hardcoded position-based approval workflow that overrides the database configurations.
+          </p>
+          <p className="text-gray-700 mb-2">
+            The workflow is based on the requester's position and the leave duration category.
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div>
+            <h3 className="font-bold text-lg mb-2">Workflow for INTERN</h3>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="font-medium mb-2">INTERN → TEAM_LEAD → HR MANAGER → HR DIRECTOR → ADMIN</p>
+              <ul className="list-disc list-inside text-gray-700 space-y-1">
+                <li>Short Leave (0.5-2 days): All 4 levels required</li>
+                <li>Medium Leave (3-6 days): All 4 levels required</li>
+                <li>Long Leave (7+ days): All 4 levels required</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="font-bold text-lg mb-2">Workflow for TEAM_LEAD</h3>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="font-medium mb-2">TEAM_LEAD → HR MANAGER → HR DIRECTOR → ADMIN</p>
+              <ul className="list-disc list-inside text-gray-700 space-y-1">
+                <li>Short Leave (0.5-2 days): Only 2 levels (HR MANAGER → HR DIRECTOR)</li>
+                <li>Medium Leave (3-6 days): 3 levels (HR MANAGER → HR DIRECTOR → ADMIN)</li>
+                <li>Long Leave (7+ days): 3 levels (HR MANAGER → HR DIRECTOR → ADMIN)</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="font-bold text-lg mb-2">Workflow for HR MANAGER</h3>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="font-medium mb-2">HR MANAGER → HR DIRECTOR</p>
+              <ul className="list-disc list-inside text-gray-700 space-y-1">
+                <li>All leave categories: Only 1 level (HR DIRECTOR)</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div>
+            <h3 className="font-bold text-lg mb-2">Workflow for HR DIRECTOR</h3>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="font-medium mb-2">HR DIRECTOR → ADMIN</p>
+              <ul className="list-disc list-inside text-gray-700 space-y-1">
+                <li>All leave categories: Only 1 level (ADMIN)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <FaInfoCircle className="h-5 w-5 text-yellow-400" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                <span className="font-bold">Note:</span> This hardcoded workflow takes precedence over any database configurations. 
+                To use the database-configured workflows instead, the hardcoded workflow needs to be removed from the code.
+              </p>
+              <p className="text-sm text-yellow-700 mt-2">
+                <span className="font-bold">Implementation:</span> The hardcoded workflow is implemented in the client-side code 
+                in <code className="bg-gray-100 px-1 py-0.5 rounded">TeamLeavesPage.tsx</code> and overrides any workflow configurations 
+                from the database.
+              </p>
+              <div className="mt-3">
+                <button 
+                  onClick={() => {
+                    setSuccess("To modify the hardcoded workflow, you would need to edit the TeamLeavesPage.tsx file. This button is for demonstration purposes only.");
+                    setTimeout(() => setSuccess(null), 5000);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm rounded"
+                >
+                  View Implementation Details
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Configured Workflows */}
+      <h2 className="text-xl font-semibold mb-4">Database Configured Workflows</h2>
+      <p className="text-gray-700 mb-4">
+        The following workflows are configured in the database but are {isHardcodedWorkflowEnabled ? 'currently overridden by the hardcoded workflow' : 'will be used when the hardcoded workflow is disabled'}.
+      </p>
+      
       <div className="bg-white shadow-md rounded-lg overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -286,6 +408,11 @@ export default function ApprovalWorkflowCustomizationPage() {
                     >
                       {workflow.isActive ? "Active" : "Inactive"}
                     </span>
+                    {isHardcodedWorkflowEnabled && (
+                      <span className="ml-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                        Overridden
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">

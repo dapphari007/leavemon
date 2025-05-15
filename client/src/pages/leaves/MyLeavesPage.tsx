@@ -280,7 +280,11 @@ const MyLeavesPage: React.FC = () => {
                               <div className="ml-3">
                                 <p className="text-sm text-yellow-700">
                                   <span className="font-medium">Currently awaiting approval from:</span> {' '}
-                                  <span className="font-bold">{getApproverPositionName(metadata.workflowDetails.approvalLevels[0])}</span>
+                                  <span className="font-bold">
+                                    {metadata.workflowDetails.approvalLevels[0] ? 
+                                      getApproverPositionName(metadata.workflowDetails.approvalLevels[0]) : 
+                                      "Approver"}
+                                  </span>
                                 </p>
                               </div>
                             </div>

@@ -46,6 +46,24 @@ api.interceptors.response.use(
       window.location.href = "/login";
     }
     
+    // Handle 500 server errors with more detailed information
+    if (error.response?.status === 500) {
+      console.error("Server Error Details:", {
+        url: error.config?.url,
+        method: error.config?.method,
+        data: error.config?.data,
+        headers: error.config?.headers
+      });
+      
+      // Add more context to the error for better debugging
+      const enhancedError = error;
+      if (enhancedError.message) {
+        enhancedError.message = `Server Error (500): ${enhancedError.message}`;
+      }
+      
+      return Promise.reject(enhancedError);
+    }
+    
     return Promise.reject(error);
   }
 );

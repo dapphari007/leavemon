@@ -34,21 +34,44 @@ const TeamLeavesPage: React.FC = () => {
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState<boolean>(false);
   const [selectedLeaveRequest, setSelectedLeaveRequest] = useState<LeaveRequest | null>(null);
 
-  // Determine user role for approval level
+  // Determine user role and position for approval level
   const userRole = user?.role || "";
+  const userPosition = user?.position || "";
+  
+  // Role-based checks (keeping for backward compatibility)
   const isTeamLead = userRole === "team_lead";
   const isManager = userRole === "manager";
   const isHR = userRole === "hr";
   const isSuperAdmin = userRole === "super_admin";
   const isAdmin = userRole === "admin";
+  
+  // Position-based checks (new implementation)
+  const isIntern = userPosition === "INTERN";
+  const isTeamLeadPosition = userPosition === "TEAM_LEAD";
+  const isHRManager = userPosition === "HR MANAGER";
+  const isHRDirector = userPosition === "HR DIRECTOR";
+  
+  // Log the hardcoded workflow being used
+  console.log("USING HARDCODED POSITION-BASED APPROVAL WORKFLOW:");
+  console.log("INTERN -> TEAM_LEAD -> HR MANAGER -> HR DIRECTOR");
+  console.log("TEAM_LEAD -> HR MANAGER -> HR DIRECTOR");
+  console.log("MANAGER -> HR DIRECTOR");
+  console.log("DIRECTOR -> ADMIN");
 
-  // Determine approval level based on role
+  // Determine approval level based on position
   const getApprovalLevel = () => {
+    // Position-based levels
+    if (isTeamLeadPosition) return 1;
+    if (isHRManager) return 2;
+    if (isHRDirector) return 3;
+    if (isAdmin) return 4;
+    if (isSuperAdmin) return 5;
+    
+    // Fallback to role-based levels for backward compatibility
     if (isTeamLead) return 1;
     if (isManager) return 2;
     if (isHR) return 3;
-    if (isAdmin) return 4;
-    if (isSuperAdmin) return 5;
+    
     return 0;
   };
   
@@ -67,25 +90,126 @@ const TeamLeavesPage: React.FC = () => {
       // Debug information - log to console to help troubleshoot
       console.log("Checking approval for request:", request.id);
       console.log("Current user role:", userRole, "User ID:", user?.id);
+      console.log("Current user position:", userPosition);
       console.log("Request user:", request.user?.firstName, request.user?.lastName);
+      console.log("Request user position:", request.user?.position);
       console.log("Request user managerId:", request.user?.managerId);
       console.log("Request user teamLeadId:", request.user?.teamLeadId);
       console.log("Request user hrId:", request.user?.hrId);
       
+      // HARDCODED POSITION-BASED WORKFLOW LOGIC
+      // Get the requester's position
+      const requesterPosition = request.user?.position || "";
+      
+      // Get the number of days for the leave request
+      const numberOfDays = request.numberOfDays || 0;
+      
+      // Determine the category based on the number of days
+      let category = "";
+      if (numberOfDays >= 0.5 && numberOfDays <= 2) {
+        category = "Short Leave";
+      } else if (numberOfDays >= 3 && numberOfDays <= 6) {
+        category = "Medium Leave";
+      } else if (numberOfDays >= 7 && numberOfDays <= 30) {
+        category = "Long Leave";
+      }
+      
+      console.log(`Leave request is for ${numberOfDays} days, category: ${category}`);
+      
+      // Implement the hardcoded workflow based on positions and category
+      if (requesterPosition === "INTERN") {
+        // INTERN always requires all 4 levels regardless of category
+        // INTERN -> TEAM_LEAD -> HR MANAGER -> HR DIRECTOR -> ADMIN
+        
+        // For level 1 approval (TEAM_LEAD)
+        if (isTeamLeadPosition && request.user && request.user.teamLeadId === user?.id) {
+          console.log("HARDCODED WORKFLOW: INTERN request can be approved by TEAM_LEAD");
+          return true;
+        }
+        
+        // For level 2 approval (HR MANAGER)
+        if (isHRManager) {
+          console.log("HARDCODED WORKFLOW: INTERN request can be approved by HR MANAGER");
+          return true;
+        }
+        
+        // For level 3 approval (HR DIRECTOR)
+        if (isHRDirector) {
+          console.log("HARDCODED WORKFLOW: INTERN request can be approved by HR DIRECTOR");
+          return true;
+        }
+        
+        // For level 4 approval (ADMIN)
+        if (isAdmin) {
+          console.log("HARDCODED WORKFLOW: INTERN request can be approved by ADMIN");
+          return true;
+        }
+      } 
+      else if (requesterPosition === "TEAM_LEAD") {
+        // For TEAM_LEAD, check the category
+        if (category === "Short Leave") {
+          // For short leaves, only need 2 levels (override category)
+          // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR
+          
+          // For level 1 approval (HR MANAGER)
+          if (isHRManager) {
+            console.log("HARDCODED WORKFLOW: TEAM_LEAD short leave request can be approved by HR MANAGER");
+            return true;
+          }
+          
+          // For level 2 approval (HR DIRECTOR)
+          if (isHRDirector) {
+            console.log("HARDCODED WORKFLOW: TEAM_LEAD short leave request can be approved by HR DIRECTOR");
+            return true;
+          }
+        } else {
+          // For medium and long leaves, need 3 levels
+          // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR -> ADMIN
+          
+          // For level 1 approval (HR MANAGER)
+          if (isHRManager) {
+            console.log(`HARDCODED WORKFLOW: TEAM_LEAD ${category} request can be approved by HR MANAGER`);
+            return true;
+          }
+          
+          // For level 2 approval (HR DIRECTOR)
+          if (isHRDirector) {
+            console.log(`HARDCODED WORKFLOW: TEAM_LEAD ${category} request can be approved by HR DIRECTOR`);
+            return true;
+          }
+          
+          // For level 3 approval (ADMIN)
+          if (isAdmin) {
+            console.log(`HARDCODED WORKFLOW: TEAM_LEAD ${category} request can be approved by ADMIN`);
+            return true;
+          }
+        }
+      }
+      else if (requesterPosition === "HR MANAGER") {
+        // MANAGER -> HR DIRECTOR
+        // For level 1 approval (HR DIRECTOR)
+        if (isHRDirector) {
+          console.log("HARDCODED WORKFLOW: HR MANAGER request can be approved by HR DIRECTOR");
+          return true;
+        }
+      }
+      else if (requesterPosition === "HR DIRECTOR") {
+        // DIRECTOR -> ADMIN
+        // For level 1 approval (ADMIN)
+        if (isAdmin) {
+          console.log("HARDCODED WORKFLOW: HR DIRECTOR request can be approved by ADMIN");
+          return true;
+        }
+      }
+      
+      // Fallback to role-based checks for backward compatibility
       // If the user is a team lead and the request is from their team member
       if (isTeamLead && request.user && request.user.teamLeadId === user?.id) {
         return true;
       }
       
       // If the user is a manager - allow approval for all pending requests
-      // This is a more permissive approach that allows managers to approve any pending request
       if (isManager) {
-        // Original check: only approve if managerId matches
-        // if (request.user && request.user.managerId === user?.id) {
-        //   return true;
-        // }
-        
-        // Modified check: managers can approve any pending request
         return true;
       }
       
@@ -103,11 +227,79 @@ const TeamLeavesPage: React.FC = () => {
       // Debug information - log to console to help troubleshoot
       console.log("Checking partially approved request:", request.id);
       console.log("Current user role:", userRole, "User ID:", user?.id);
+      console.log("Current user position:", userPosition);
       console.log("Current approval level:", request.metadata.currentApprovalLevel);
       console.log("Required approval levels:", request.metadata.requiredApprovalLevels);
       
       const currentApprovalLevel = request.metadata.currentApprovalLevel || 0;
       const nextRequiredLevel = currentApprovalLevel + 1;
+      
+      // HARDCODED POSITION-BASED WORKFLOW LOGIC FOR PARTIALLY APPROVED REQUESTS
+      // Get the requester's position
+      const requesterPosition = request.user?.position || "";
+      
+      // Get the number of days for the leave request
+      const numberOfDays = request.numberOfDays || 0;
+      
+      // Determine the category based on the number of days
+      let category = "";
+      if (numberOfDays >= 0.5 && numberOfDays <= 2) {
+        category = "Short Leave";
+      } else if (numberOfDays >= 3 && numberOfDays <= 6) {
+        category = "Medium Leave";
+      } else if (numberOfDays >= 7 && numberOfDays <= 30) {
+        category = "Long Leave";
+      }
+      
+      console.log(`Partially approved leave request is for ${numberOfDays} days, category: ${category}`);
+      
+      // Implement the hardcoded workflow based on positions and category
+      if (requesterPosition === "INTERN") {
+        // INTERN always requires all 4 levels regardless of category
+        // INTERN -> TEAM_LEAD -> HR MANAGER -> HR DIRECTOR -> ADMIN
+        if (currentApprovalLevel === 1 && isHRManager) {
+          console.log("HARDCODED WORKFLOW: INTERN request at level 1 can be approved by HR MANAGER");
+          return true;
+        }
+        if (currentApprovalLevel === 2 && isHRDirector) {
+          console.log("HARDCODED WORKFLOW: INTERN request at level 2 can be approved by HR DIRECTOR");
+          return true;
+        }
+        if (currentApprovalLevel === 3 && isAdmin) {
+          console.log("HARDCODED WORKFLOW: INTERN request at level 3 can be approved by ADMIN");
+          return true;
+        }
+      } 
+      else if (requesterPosition === "TEAM_LEAD") {
+        // For TEAM_LEAD, check the category
+        if (category === "Short Leave") {
+          // For short leaves, only need 2 levels
+          // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR
+          if (currentApprovalLevel === 1 && isHRDirector) {
+            console.log("HARDCODED WORKFLOW: TEAM_LEAD short leave request at level 1 can be approved by HR DIRECTOR");
+            return true;
+          }
+        } else {
+          // For medium and long leaves, need 3 levels
+          // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR -> ADMIN
+          if (currentApprovalLevel === 1 && isHRDirector) {
+            console.log(`HARDCODED WORKFLOW: TEAM_LEAD ${category} request at level 1 can be approved by HR DIRECTOR`);
+            return true;
+          }
+          if (currentApprovalLevel === 2 && isAdmin) {
+            console.log(`HARDCODED WORKFLOW: TEAM_LEAD ${category} request at level 2 can be approved by ADMIN`);
+            return true;
+          }
+        }
+      }
+      else if (requesterPosition === "HR MANAGER") {
+        // HR MANAGER -> HR DIRECTOR
+        // No partially approved state for this workflow as it's only one level
+      }
+      else if (requesterPosition === "HR DIRECTOR") {
+        // HR DIRECTOR -> ADMIN
+        // No partially approved state for this workflow as it's only one level
+      }
       
       // Check if the user's role matches what's needed for the next level
       if (request.metadata.workflowDetails && request.metadata.workflowDetails.approvalLevels) {
@@ -285,6 +477,37 @@ const TeamLeavesPage: React.FC = () => {
   const getApproverPositionName = (levelDetails: any): string => {
     if (!levelDetails) return "Unknown";
     
+    // For hardcoded position-based workflow, show the position name
+    if (levelDetails.level) {
+      // Get the requester's position from the selected leave request
+      const requesterPosition = selectedLeaveRequest?.user?.position || "";
+      
+      // Return the appropriate position based on the hardcoded workflow
+      if (requesterPosition === "INTERN") {
+        // INTERN -> TEAM_LEAD -> HR MANAGER -> HR DIRECTOR
+        if (levelDetails.level === 1) return "TEAM_LEAD";
+        if (levelDetails.level === 2) return "HR MANAGER";
+        if (levelDetails.level === 3) return "HR DIRECTOR";
+        if (levelDetails.level === 4) return "ADMIN";
+      } 
+      else if (requesterPosition === "TEAM_LEAD") {
+        // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR
+        if (levelDetails.level === 1) return "HR MANAGER";
+        if (levelDetails.level === 2) return "HR DIRECTOR";
+        if (levelDetails.level === 3) return "ADMIN";
+      }
+      else if (requesterPosition === "HR MANAGER") {
+        // HR MANAGER -> HR DIRECTOR
+        if (levelDetails.level === 1) return "HR DIRECTOR";
+        if (levelDetails.level === 2) return "ADMIN";
+      }
+      else if (requesterPosition === "HR DIRECTOR") {
+        // HR DIRECTOR -> ADMIN
+        if (levelDetails.level === 1) return "ADMIN";
+      }
+    }
+    
+    // Fallback to the original implementation for backward compatibility
     if (levelDetails.approverType) {
       switch (levelDetails.approverType) {
         case "teamLead":
@@ -329,7 +552,64 @@ const TeamLeavesPage: React.FC = () => {
     const metadata = selectedLeaveRequest.metadata || {};
     const approvalHistory = metadata.approvalHistory || [];
     const currentLevel = metadata.currentApprovalLevel || 0;
-    const requiredLevels = metadata.requiredApprovalLevels || [];
+    
+    // Get the requester's position
+    const requesterPosition = selectedLeaveRequest.user?.position || "";
+    
+    // Determine required levels based on the hardcoded workflow
+    let requiredLevels: number[] = [];
+    
+    // Get the number of days for the leave request
+    const numberOfDays = selectedLeaveRequest.numberOfDays || 0;
+    
+    // Determine the category based on the number of days
+    let category = "";
+    if (numberOfDays >= 0.5 && numberOfDays <= 2) {
+      category = "Short Leave";
+    } else if (numberOfDays >= 3 && numberOfDays <= 6) {
+      category = "Medium Leave";
+    } else if (numberOfDays >= 7 && numberOfDays <= 30) {
+      category = "Long Leave";
+    }
+    
+    console.log(`Leave request is for ${numberOfDays} days, category: ${category}`);
+    
+    // Use hardcoded workflow based on position and category
+    if (requesterPosition === "INTERN") {
+      // INTERN always requires all 4 levels regardless of category
+      // INTERN -> TEAM_LEAD -> HR MANAGER -> HR DIRECTOR
+      requiredLevels = [1, 2, 3, 4];
+      console.log("HARDCODED WORKFLOW for INTERN: Using levels", requiredLevels);
+    } 
+    else if (requesterPosition === "TEAM_LEAD") {
+      // For TEAM_LEAD, check the category
+      if (category === "Short Leave") {
+        // For short leaves, only need 2 levels (override category)
+        requiredLevels = [1, 2];
+      } else if (category === "Medium Leave") {
+        // For medium leaves, need 3 levels
+        requiredLevels = [1, 2, 3];
+      } else {
+        // For long leaves, need all levels
+        requiredLevels = [1, 2, 3];
+      }
+      console.log(`HARDCODED WORKFLOW for TEAM_LEAD (${category}): Using levels`, requiredLevels);
+    }
+    else if (requesterPosition === "HR MANAGER") {
+      // HR MANAGER -> HR DIRECTOR
+      requiredLevels = [1];
+      console.log("HARDCODED WORKFLOW for HR MANAGER: Using levels", requiredLevels);
+    }
+    else if (requesterPosition === "HR DIRECTOR") {
+      // HR DIRECTOR -> ADMIN
+      requiredLevels = [1];
+      console.log("HARDCODED WORKFLOW for HR DIRECTOR: Using levels", requiredLevels);
+    }
+    else {
+      // Fallback to metadata if position doesn't match any hardcoded workflow
+      requiredLevels = metadata.requiredApprovalLevels || [];
+      console.log("Using default workflow levels from metadata:", requiredLevels);
+    }
     
     return (
       <Modal
@@ -472,7 +752,11 @@ const TeamLeavesPage: React.FC = () => {
                               <div className="ml-3">
                                 <p className="text-sm text-yellow-700">
                                   <span className="font-medium">Currently awaiting approval from:</span> {' '}
-                                  <span className="font-bold">{getApproverPositionName(metadata.workflowDetails.approvalLevels[0])}</span>
+                                  <span className="font-bold">
+                                    {metadata.workflowDetails.approvalLevels[0] ? 
+                                      getApproverPositionName(metadata.workflowDetails.approvalLevels[0]) : 
+                                      "Approver"}
+                                  </span>
                                   {/* Always show approval option for managers */}
                                   {(canApproveRequest(selectedLeaveRequest) || isManager) && 
                                     <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded">You can approve this</span>
@@ -522,7 +806,18 @@ const TeamLeavesPage: React.FC = () => {
                                   </div>
                                   <div className="ml-3">
                                     <p className="text-sm text-yellow-700">
-                                      <span className="font-medium">This request requires {metadata.requiredApprovalLevels.length} level(s) of approval</span>
+                                      <span className="font-medium">
+                                        Currently awaiting approval from: {' '}
+                                        {/* Use the hardcoded workflow to determine the current approver */}
+                                        <strong>
+                                          {requesterPosition === "INTERN" && "TEAM_LEAD"}
+                                          {requesterPosition === "TEAM_LEAD" && "HR MANAGER"}
+                                          {requesterPosition === "HR MANAGER" && "HR DIRECTOR"}
+                                          {requesterPosition === "HR DIRECTOR" && "ADMIN"}
+                                          {!["INTERN", "TEAM_LEAD", "HR MANAGER", "HR DIRECTOR"].includes(requesterPosition) && 
+                                            `Level 1 Approver (${metadata.requiredApprovalLevels.length} levels required)`}
+                                        </strong>
+                                      </span>
                                       {/* Always show approval option for managers */}
                                       {(canApproveRequest(selectedLeaveRequest) || isManager) && 
                                         <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded">You can approve this</span>
@@ -530,6 +825,56 @@ const TeamLeavesPage: React.FC = () => {
                                     </p>
                                   </div>
                                 </div>
+                              </div>
+                              
+                              {/* Display the hardcoded workflow steps */}
+                              <p className="font-medium">Approval workflow for {requesterPosition}:</p>
+                              <div className="mt-2 space-y-2">
+                                {requiredLevels.map((level: number, index: number) => {
+                                  // Determine the approver position based on the requester's position and level
+                                  let approverPosition = "Unknown";
+                                  
+                                  if (requesterPosition === "INTERN") {
+                                    // INTERN -> TEAM_LEAD -> HR MANAGER -> HR DIRECTOR -> ADMIN
+                                    if (level === 1) approverPosition = "TEAM_LEAD";
+                                    else if (level === 2) approverPosition = "HR MANAGER";
+                                    else if (level === 3) approverPosition = "HR DIRECTOR";
+                                    else if (level === 4) approverPosition = "ADMIN";
+                                  } 
+                                  else if (requesterPosition === "TEAM_LEAD") {
+                                    // For TEAM_LEAD, check the category
+                                    if (category === "Short Leave") {
+                                      // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR
+                                      if (level === 1) approverPosition = "HR MANAGER";
+                                      else if (level === 2) approverPosition = "HR DIRECTOR";
+                                    } else {
+                                      // TEAM_LEAD -> HR MANAGER -> HR DIRECTOR -> ADMIN
+                                      if (level === 1) approverPosition = "HR MANAGER";
+                                      else if (level === 2) approverPosition = "HR DIRECTOR";
+                                      else if (level === 3) approverPosition = "ADMIN";
+                                    }
+                                  }
+                                  else if (requesterPosition === "HR MANAGER") {
+                                    // HR MANAGER -> HR DIRECTOR
+                                    if (level === 1) approverPosition = "HR DIRECTOR";
+                                  }
+                                  else if (requesterPosition === "HR DIRECTOR") {
+                                    // HR DIRECTOR -> ADMIN
+                                    if (level === 1) approverPosition = "ADMIN";
+                                  }
+                                  
+                                  return (
+                                    <div key={`level-${level}`} className="flex items-center">
+                                      <div className={`w-8 h-8 flex items-center justify-center rounded-full ${index === 0 ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-200 text-gray-500'} mr-3`}>
+                                        {level}
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">{approverPosition}</p>
+                                        {index === 0 && <span className="text-yellow-600 text-xs font-bold">(CURRENT)</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </>
                           ) : (

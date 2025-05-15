@@ -1,17 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import axios from "axios";
-import config from "../../config";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Alert from "../../components/ui/Alert";
 import { getPositionById, updatePosition, Position } from "../../services/positionService";
-
-interface Department {
-  id: string;
-  name: string;
-}
+import { getAllDepartments, Department } from "../../services/departmentService";
 
 interface FormData {
   name: string;
@@ -44,6 +38,13 @@ const EditPositionPage: React.FC = () => {
       
       try {
         const positionData = await getPositionById(id);
+        
+        if (!positionData) {
+          setError("Position not found or data is empty");
+          setIsFetching(false);
+          return;
+        }
+        
         setPosition(positionData);
         
         // Set form values
@@ -54,9 +55,16 @@ const EditPositionPage: React.FC = () => {
           level: positionData.level || 1,
           isActive: positionData.isActive,
         });
-      } catch (err) {
+        
+        console.log("Position data loaded successfully:", positionData);
+      } catch (err: any) {
         console.error("Error fetching position:", err);
-        setError("Failed to load position data");
+        // Provide more detailed error message
+        setError(
+          err.response?.data?.message || 
+          err.message || 
+          "Failed to load position data. Please try again."
+        );
       } finally {
         setIsFetching(false);
       }
@@ -69,18 +77,8 @@ const EditPositionPage: React.FC = () => {
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        const response = await axios.get(`${config.apiUrl}/departments`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
-        
-        if (response.data && Array.isArray(response.data.departments)) {
-          setDepartments(response.data.departments);
-        } else {
-          console.error("Unexpected departments response format:", response.data);
-          setDepartments([]);
-        }
+        const departmentsData = await getAllDepartments();
+        setDepartments(departmentsData);
       } catch (err) {
         console.error("Error fetching departments:", err);
         setError("Failed to load departments");
@@ -97,18 +95,29 @@ const EditPositionPage: React.FC = () => {
     setError(null);
     
     try {
-      await updatePosition(id, {
+      // Log the data being sent to the API for debugging
+      const updateData = {
         name: data.name,
         description: data.description,
         departmentId: data.departmentId === "" ? undefined : data.departmentId,
         level: data.level,
         isActive: data.isActive,
-      });
+      };
       
+      console.log("Updating position with data:", updateData);
+      
+      await updatePosition(id, updateData);
+      
+      console.log("Position updated successfully");
       navigate("/positions");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error updating position:", err);
-      setError("Failed to update position. Please try again.");
+      // Provide more detailed error message
+      setError(
+        err.response?.data?.message || 
+        err.message || 
+        "Failed to update position. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +221,9 @@ const EditPositionPage: React.FC = () => {
               <select
                 id="isActive"
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                {...register("isActive")}
+                {...register("isActive", { 
+                  setValueAs: (value) => value === "true" || value === true 
+                })}
               >
                 <option value="true">Active</option>
                 <option value="false">Inactive</option>

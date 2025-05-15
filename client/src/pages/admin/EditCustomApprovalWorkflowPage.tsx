@@ -8,6 +8,54 @@ import { getAllPositions, getAssignedPositionsByDepartment } from "../../service
 import { getAllTopLevelPositions } from "../../services/topLevelPositionService";
 import { getAllLeaveCategories } from "../../services/leaveCategoryService";
 
+// Define interfaces for our data structures
+interface Position {
+  id: string;
+  name: string;
+  departmentId?: string;
+  departmentName?: string;
+  employeeInfo?: any;
+}
+
+interface Department {
+  id: string;
+  name: string;
+}
+
+interface LeaveCategory {
+  id: string;
+  name: string;
+  defaultMinDays: number;
+  defaultMaxDays: number;
+  maxApprovalLevels: number;
+}
+
+interface Workflow {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  leaveCategoryId?: string;
+  minDays: number;
+  maxDays: number;
+  departmentId?: string;
+  positionId?: string;
+  isActive: boolean;
+  isDefault: boolean;
+  approvalLevels: ApprovalLevel[];
+  positionName?: string;
+  departmentName?: string;
+}
+
+interface ApprovalLevel {
+  level: number;
+  positionId: string;
+  departmentId?: string;
+  isRequired: boolean;
+  positionName?: string;
+  departmentName?: string;
+}
+
 type FormValues = {
   name: string;
   description: string;
@@ -67,51 +115,51 @@ export default function EditCustomApprovalWorkflowPage() {
   });
 
   const watchApprovalLevels = watch("approvalLevels");
-  const watchCategory = watch("category");
+  // const watchCategory = watch("category"); // Commented out as it's not used
   const watchLeaveCategory = watch("leaveCategoryId");
   const watchDepartmentId = watch("departmentId");
 
-  const { data: workflow, isLoading: isLoadingWorkflow } = useQuery({
+  const { data: workflow, isLoading: isLoadingWorkflow } = useQuery<Workflow>({
     queryKey: ["customWorkflow", id],
     queryFn: () => getCustomApprovalWorkflowById(id as string),
     enabled: !!id,
   });
 
-  const { data: departments = [] } = useQuery({
+  const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ["departments"],
     queryFn: () => getAllDepartments(),
   });
 
-  const { data: positions = [] } = useQuery({
+  const { data: positions = [] } = useQuery<Position[]>({
     queryKey: ["positions"],
     queryFn: () => getAllPositions(),
   });
   
   // Get positions filtered by department
-  const { data: departmentPositions = [], refetch: refetchDepartmentPositions } = useQuery({
+  const { data: departmentPositions = [], refetch: refetchDepartmentPositions } = useQuery<Position[]>({
     queryKey: ["positions", watchDepartmentId],
     queryFn: () => getAllPositions({ departmentId: watchDepartmentId }),
     enabled: !!watchDepartmentId,
   });
   
   // Get positions that are actually assigned to users in this department
-  const { data: assignedPositions = [], refetch: refetchAssignedPositions } = useQuery({
+  const { data: assignedPositions = [], refetch: refetchAssignedPositions } = useQuery<Position[]>({
     queryKey: ["assignedPositions", watchDepartmentId],
     queryFn: () => getAssignedPositionsByDepartment(watchDepartmentId),
     enabled: !!watchDepartmentId,
   });
 
-  const { data: topLevelPositions = [] } = useQuery({
+  const { data: topLevelPositions = [] } = useQuery<Position[]>({
     queryKey: ["topLevelPositions"],
     queryFn: () => getAllTopLevelPositions(),
   });
   
-  const { data: leaveCategories = [] } = useQuery({
+  const { data: leaveCategories = [] } = useQuery<LeaveCategory[]>({
     queryKey: ["leaveCategories"],
     queryFn: () => getAllLeaveCategories(),
   });
 
-  const { fields, append, remove, replace } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control,
     name: "approvalLevels",
   });
@@ -119,12 +167,12 @@ export default function EditCustomApprovalWorkflowPage() {
   useEffect(() => {
     if (workflow && !isLoadingWorkflow) {
       // Process approval levels to ensure all required data is present
-      const processedApprovalLevels = workflow.approvalLevels.map((level: any) => {
+      const processedApprovalLevels = workflow.approvalLevels.map((level: ApprovalLevel) => {
         // Find position details if available
-        const positionDetails = positions.find(p => p.id === level.positionId) || {};
+        const positionDetails = positions.find(p => p.id === level.positionId) as Position | undefined;
         
         // Find department details if available
-        const departmentDetails = departments.find(d => d.id === (level.departmentId || workflow.departmentId)) || {};
+        const departmentDetails = departments.find(d => d.id === (level.departmentId || workflow.departmentId)) as Department | undefined;
         
         // Ensure we have all the necessary fields
         return {
@@ -134,29 +182,29 @@ export default function EditCustomApprovalWorkflowPage() {
           departmentId: level.departmentId || workflow.departmentId || "",
           isRequired: level.isRequired,
           // Store additional information for reference - use data from API if available
-          positionName: level.positionName || positionDetails.name || "",
-          departmentName: level.departmentName || departmentDetails.name || "",
+          positionName: level.positionName || (positionDetails?.name || ""),
+          departmentName: level.departmentName || (departmentDetails?.name || ""),
         };
       });
       
       // Find main position and department details
-      const mainPositionDetails = workflow.positionId ? positions.find(p => p.id === workflow.positionId) || {} : {};
-      const mainDepartmentDetails = workflow.departmentId ? departments.find(d => d.id === workflow.departmentId) || {} : {};
+      const mainPositionDetails = workflow.positionId ? positions.find(p => p.id === workflow.positionId) as Position | undefined : undefined;
+      const mainDepartmentDetails = workflow.departmentId ? departments.find(d => d.id === workflow.departmentId) as Department | undefined : undefined;
       
       // Store position and department names for reference
-      if (mainPositionDetails.name && !workflow.positionName) {
+      if (mainPositionDetails?.name && !workflow.positionName) {
         workflow.positionName = mainPositionDetails.name;
       }
       
-      if (mainDepartmentDetails.name && !workflow.departmentName) {
+      if (mainDepartmentDetails?.name && !workflow.departmentName) {
         workflow.departmentName = mainDepartmentDetails.name;
       }
       
       // Log the workflow data for debugging
       console.log("Loaded workflow:", {
         ...workflow,
-        positionName: workflow.positionName || mainPositionDetails.name,
-        departmentName: workflow.departmentName || mainDepartmentDetails.name
+        positionName: workflow.positionName || (mainPositionDetails?.name || ""),
+        departmentName: workflow.departmentName || (mainDepartmentDetails?.name || "")
       });
       
       reset({
@@ -188,7 +236,7 @@ export default function EditCustomApprovalWorkflowPage() {
   // Update min/max days when a leave category is selected
   useEffect(() => {
     if (watchLeaveCategory) {
-      const selectedCategory = leaveCategories.find((cat: any) => cat.id === watchLeaveCategory);
+      const selectedCategory = leaveCategories.find((cat: LeaveCategory) => cat.id === watchLeaveCategory);
       if (selectedCategory) {
         setValue("minDays", selectedCategory.defaultMinDays);
         setValue("maxDays", selectedCategory.defaultMaxDays);
@@ -247,11 +295,11 @@ export default function EditCustomApprovalWorkflowPage() {
     // Ensure approval levels are properly ordered
     const formattedApprovalLevels = data.approvalLevels.map((level, index) => {
       // Find the position details to include employee information
-      const positionDetails = positions.find(p => p.id === level.positionId) || {};
+      const positionDetails = positions.find(p => p.id === level.positionId) as Position | undefined;
       
       // Find department details
-      const departmentId = level.departmentId || positionDetails.departmentId || data.departmentId || null;
-      const departmentDetails = departments.find(d => d.id === departmentId) || {};
+      const departmentId = level.departmentId || positionDetails?.departmentId || data.departmentId || null;
+      const departmentDetails = departments.find(d => d.id === departmentId) as Department | undefined;
       
       return {
         ...level,
@@ -259,10 +307,10 @@ export default function EditCustomApprovalWorkflowPage() {
         // Ensure departmentId is properly set (use the position's department if available)
         departmentId: departmentId,
         // Include position name for better display in approval workflows
-        positionName: positionDetails.name || level.positionName || null,
-        departmentName: departmentDetails.name || level.departmentName || positionDetails.departmentName || null,
+        positionName: (positionDetails?.name || level.positionName || null),
+        departmentName: (departmentDetails?.name || level.departmentName || positionDetails?.departmentName || null),
         // Include any employee information if available
-        employeeInfo: positionDetails.employeeInfo || null,
+        employeeInfo: positionDetails?.employeeInfo || null,
       };
     });
 
@@ -270,17 +318,17 @@ export default function EditCustomApprovalWorkflowPage() {
     console.log("Saving approval workflow with levels:", formattedApprovalLevels);
 
     // Get main position details if selected
-    const mainPositionDetails = data.positionId ? positions.find(p => p.id === data.positionId) || {} : {};
-    const mainDepartmentDetails = data.departmentId ? departments.find(d => d.id === data.departmentId) || {} : {};
+    const mainPositionDetails = data.positionId ? positions.find(p => p.id === data.positionId) as Position | undefined : undefined;
+    const mainDepartmentDetails = data.departmentId ? departments.find(d => d.id === data.departmentId) as Department | undefined : undefined;
     
     // Determine position and department names
-    const positionName = mainPositionDetails.name || 
+    const positionName = (mainPositionDetails?.name || 
                          (workflow?.positionId === data.positionId ? workflow?.positionName : null) || 
-                         null;
+                         null);
                          
-    const departmentName = mainDepartmentDetails.name || 
+    const departmentName = (mainDepartmentDetails?.name || 
                           (workflow?.departmentId === data.departmentId ? workflow?.departmentName : null) || 
-                          null;
+                          null);
     
     // Log what we're saving for debugging
     console.log("Saving main position/department:", {
@@ -311,7 +359,7 @@ export default function EditCustomApprovalWorkflowPage() {
   const addApprovalLevel = () => {
     // Check if we've reached the maximum approval levels for the selected category
     if (watchLeaveCategory) {
-      const selectedCategory = leaveCategories.find((cat: any) => cat.id === watchLeaveCategory);
+      const selectedCategory = leaveCategories.find((cat: LeaveCategory) => cat.id === watchLeaveCategory);
       if (selectedCategory && fields.length >= selectedCategory.maxApprovalLevels) {
         setError(`Maximum of ${selectedCategory.maxApprovalLevels} approval levels allowed for this category`);
         return;
@@ -320,7 +368,7 @@ export default function EditCustomApprovalWorkflowPage() {
     
     // Get department name if a department is selected
     const departmentName = watchDepartmentId 
-      ? departments.find((dept: any) => dept.id === watchDepartmentId)?.name || ""
+      ? departments.find((dept: Department) => dept.id === watchDepartmentId)?.name || ""
       : "";
       
     append({
