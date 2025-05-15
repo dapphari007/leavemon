@@ -152,6 +152,13 @@ export default function EditCustomApprovalWorkflowPage() {
         workflow.departmentName = mainDepartmentDetails.name;
       }
       
+      // Log the workflow data for debugging
+      console.log("Loaded workflow:", {
+        ...workflow,
+        positionName: workflow.positionName || mainPositionDetails.name,
+        departmentName: workflow.departmentName || mainDepartmentDetails.name
+      });
+      
       reset({
         name: workflow.name,
         description: workflow.description || "",
@@ -266,6 +273,23 @@ export default function EditCustomApprovalWorkflowPage() {
     const mainPositionDetails = data.positionId ? positions.find(p => p.id === data.positionId) || {} : {};
     const mainDepartmentDetails = data.departmentId ? departments.find(d => d.id === data.departmentId) || {} : {};
     
+    // Determine position and department names
+    const positionName = mainPositionDetails.name || 
+                         (workflow?.positionId === data.positionId ? workflow?.positionName : null) || 
+                         null;
+                         
+    const departmentName = mainDepartmentDetails.name || 
+                          (workflow?.departmentId === data.departmentId ? workflow?.departmentName : null) || 
+                          null;
+    
+    // Log what we're saving for debugging
+    console.log("Saving main position/department:", {
+      positionId: data.positionId,
+      positionName,
+      departmentId: data.departmentId,
+      departmentName
+    });
+    
     updateMutation.mutate({
       name: data.name,
       description: data.description,
@@ -276,8 +300,8 @@ export default function EditCustomApprovalWorkflowPage() {
       departmentId: data.departmentId || null,
       positionId: data.positionId || null,
       // Include position and department names for the main workflow
-      positionName: mainPositionDetails.name || workflow?.positionName || null,
-      departmentName: mainDepartmentDetails.name || workflow?.departmentName || null,
+      positionName: positionName,
+      departmentName: departmentName,
       approvalLevels: formattedApprovalLevels,
       isActive: data.isActive,
       isDefault: data.isDefault,
@@ -429,9 +453,11 @@ export default function EditCustomApprovalWorkflowPage() {
               Department (Optional)
             </label>
             {/* Show currently selected department name if available */}
-            {workflow?.departmentId && workflow?.departmentName && (
-              <p className="text-xs text-blue-600 mb-1">
-                Currently selected: {workflow.departmentName}
+            {workflow?.departmentId && (
+              <p className="text-xs text-blue-600 mb-1 font-semibold">
+                Currently selected: {workflow.departmentName || 
+                  departments.find(d => d.id === workflow.departmentId)?.name || 
+                  `Department ID: ${workflow.departmentId}`}
               </p>
             )}
             <select
@@ -451,9 +477,11 @@ export default function EditCustomApprovalWorkflowPage() {
               Position (Optional)
             </label>
             {/* Show currently selected position name if available */}
-            {workflow?.positionId && workflow?.positionName && (
-              <p className="text-xs text-blue-600 mb-1">
-                Currently selected: {workflow.positionName}
+            {workflow?.positionId && (
+              <p className="text-xs text-blue-600 mb-1 font-semibold">
+                Currently selected: {workflow.positionName || 
+                  positions.find(p => p.id === workflow.positionId)?.name || 
+                  `Position ID: ${workflow.positionId}`}
               </p>
             )}
             <select
@@ -465,13 +493,21 @@ export default function EditCustomApprovalWorkflowPage() {
               {/* Show the currently selected position first if it exists */}
               {workflow?.positionId && (
                 <optgroup label="Currently Selected Position">
-                  {positions
-                    .filter(pos => pos.id === workflow.positionId)
-                    .map(position => (
-                      <option key={position.id} value={position.id}>
-                        {position.name} {position.departmentName ? `(${position.departmentName})` : ''}
-                      </option>
-                    ))}
+                  {/* First try to find the position in the positions list */}
+                  {positions.filter(pos => pos.id === workflow.positionId).length > 0 ? (
+                    positions
+                      .filter(pos => pos.id === workflow.positionId)
+                      .map(position => (
+                        <option key={position.id} value={position.id}>
+                          {position.name} {position.departmentName ? `(${position.departmentName})` : ''}
+                        </option>
+                      ))
+                  ) : (
+                    /* If not found in positions list, create an option with the saved name */
+                    <option key={workflow.positionId} value={workflow.positionId}>
+                      {workflow.positionName || `Position ID: ${workflow.positionId}`}
+                    </option>
+                  )}
                 </optgroup>
               )}
               
