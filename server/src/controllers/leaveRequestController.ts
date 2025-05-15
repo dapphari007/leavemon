@@ -9,6 +9,7 @@ import {
   LeaveType,
   LeaveBalance,
   ApprovalWorkflow,
+  CustomApprovalWorkflow,
 } from "../models";
 import {
   calculateBusinessDays,
@@ -196,9 +197,110 @@ export const createLeaveRequest = async (
     leaveRequest.reason = reason;
     leaveRequest.status = LeaveRequestStatus.PENDING;
 
+    // Check for custom approval workflows before saving
+    const customApprovalWorkflowRepository = AppDataSource.getRepository(CustomApprovalWorkflow);
+    let customWorkflow = null;
+    
+    // Try to find a custom workflow that matches this leave request
+    const customWorkflows = await customApprovalWorkflowRepository.find({
+      where: {
+        isActive: true,
+        minDays: LessThanOrEqual(numberOfDays),
+        maxDays: MoreThanOrEqual(numberOfDays),
+      },
+    });
+    
+    // Filter workflows by department and position if they exist
+    const matchingWorkflows = customWorkflows.filter(workflow => {
+      // If workflow has department and position constraints, check them
+      if (workflow.departmentId && workflow.positionId) {
+        return workflow.departmentId === user.departmentId && 
+               workflow.positionId === user.positionId;
+      }
+      // If only department constraint
+      else if (workflow.departmentId) {
+        return workflow.departmentId === user.departmentId;
+      }
+      // If only position constraint
+      else if (workflow.positionId) {
+        return workflow.positionId === user.positionId;
+      }
+      // No constraints, this is a general workflow
+      return true;
+    });
+    
+    // If we found matching workflows, use the first one
+    if (matchingWorkflows.length > 0) {
+      customWorkflow = matchingWorkflows[0];
+      
+      // Add workflow metadata to the leave request
+      leaveRequest.metadata = leaveRequest.metadata || {};
+      
+      // Parse approval levels if needed
+      const approvalLevels = Array.isArray(customWorkflow.approvalLevels) ? 
+        customWorkflow.approvalLevels : 
+        (typeof customWorkflow.approvalLevels === 'string' ? 
+          JSON.parse(customWorkflow.approvalLevels) : []);
+          
+      // Store workflow details
+      leaveRequest.metadata.workflowDetails = {
+        name: customWorkflow.name,
+        approvalLevels: approvalLevels
+      };
+      
+      // Store workflow ID separately
+      leaveRequest.metadata.workflowId = customWorkflow.id;
+      
+      // Set required approval levels
+      leaveRequest.metadata.requiredApprovalLevels = approvalLevels.map(level => level.level);
+    }
+    
     // Save leave request to database
     const savedLeaveRequest = await leaveRequestRepository.save(leaveRequest);
 
+    // If we have a custom workflow, notify the appropriate approvers
+    if (customWorkflow) {
+      // Parse approval levels if needed
+      const approvalLevels = Array.isArray(customWorkflow.approvalLevels) ? 
+        customWorkflow.approvalLevels : 
+        (typeof customWorkflow.approvalLevels === 'string' ? 
+          JSON.parse(customWorkflow.approvalLevels) : []);
+      
+      // Find level 1 approvers
+      const level1 = approvalLevels.find(level => level.level === 1);
+      
+      if (level1 && level1.positionId) {
+        // Find users with this position
+        const positionApprovers = await userRepository.find({
+          where: { 
+            positionId: level1.positionId,
+            isActive: true 
+          },
+        });
+        
+        if (positionApprovers.length > 0) {
+          // Notify all users with this position
+          for (const approver of positionApprovers) {
+            await emailService.sendLeaveRequestNotification(
+              approver.email,
+              `${user.firstName} ${user.lastName}`,
+              leaveType.name,
+              formatDate(start),
+              formatDate(end),
+              `${reason}\n\nNote: This leave request is assigned to you based on a custom approval workflow (${customWorkflow.name}).`
+            );
+          }
+          
+          // We've notified the custom workflow approvers, so return
+          return h.response({
+            message: "Leave request created successfully",
+            leaveRequest: savedLeaveRequest,
+          });
+        }
+      }
+    }
+    
+    // If no custom workflow or no approvers found, fall back to standard notification logic
     // Find approvers to notify based on leave duration and user's assigned approvers
     // If user is super_admin, redirect to HR
     if (user.role === UserRole.SUPER_ADMIN) {
@@ -641,12 +743,6 @@ export const updateLeaveRequestStatus = async (
       return h.response({ message: "Approver not found" }).code(404);
     }
 
-    // Check if the approver is authorized based on department and role
-    const authorizationCheck = await approverService.isApproverAuthorized(
-      approverId as string,
-      leaveRequest.userId
-    );
-
     // Get the request user for additional checks
     const requestUser = await userRepository.findOne({
       where: { id: leaveRequest.userId },
@@ -656,6 +752,72 @@ export const updateLeaveRequestStatus = async (
       return h.response({ message: "User not found" }).code(404);
     }
 
+    // Check for custom approval workflows first
+    const customApprovalWorkflowRepository = AppDataSource.getRepository(CustomApprovalWorkflow);
+    let isAuthorizedByCustomWorkflow = false;
+    
+    // Try to find a custom workflow that matches this leave request
+    const customWorkflows = await customApprovalWorkflowRepository.find({
+      where: {
+        isActive: true,
+        minDays: LessThanOrEqual(leaveRequest.numberOfDays),
+        maxDays: MoreThanOrEqual(leaveRequest.numberOfDays),
+      },
+    });
+    
+    // Filter workflows by department and position if they exist
+    const matchingWorkflows = customWorkflows.filter(workflow => {
+      // If workflow has department and position constraints, check them
+      if (workflow.departmentId && workflow.positionId) {
+        return workflow.departmentId === requestUser.departmentId && 
+               workflow.positionId === requestUser.positionId;
+      }
+      // If only department constraint
+      else if (workflow.departmentId) {
+        return workflow.departmentId === requestUser.departmentId;
+      }
+      // If only position constraint
+      else if (workflow.positionId) {
+        return workflow.positionId === requestUser.positionId;
+      }
+      // No constraints, this is a general workflow
+      return true;
+    });
+    
+    // Check if the approver's position matches any of the approval levels in matching workflows
+    if (matchingWorkflows.length > 0) {
+      for (const workflow of matchingWorkflows) {
+        const approvalLevels = Array.isArray(workflow.approvalLevels) ? 
+          workflow.approvalLevels : 
+          (typeof workflow.approvalLevels === 'string' ? 
+            JSON.parse(workflow.approvalLevels) : []);
+            
+        // For pending requests, check level 1
+        // For partially approved, check the next level
+        const levelToCheck = leaveRequest.status === LeaveRequestStatus.PARTIALLY_APPROVED && 
+                            leaveRequest.metadata?.currentApprovalLevel ? 
+                            leaveRequest.metadata.currentApprovalLevel + 1 : 1;
+                            
+        const matchingLevel = approvalLevels.find(level => 
+          level.level === levelToCheck && level.positionId === approver.positionId);
+          
+        if (matchingLevel) {
+          isAuthorizedByCustomWorkflow = true;
+          // Store the workflow details for later use
+          leaveRequest.metadata = leaveRequest.metadata || {};
+          leaveRequest.metadata.workflowDetails = {
+            name: workflow.name,
+            approvalLevels: approvalLevels
+          };
+          
+          // Store workflow ID separately
+          leaveRequest.metadata.workflowId = workflow.id;
+          break;
+        }
+      }
+    }
+    
+    // If not authorized by custom workflow, check standard authorization
     const isManager = requestUser.managerId === approverId;
     const isTeamLead = requestUser.teamLeadId === approverId;
     const isAdminOrHR =
@@ -663,6 +825,25 @@ export const updateLeaveRequestStatus = async (
     const isSelfCancellation =
       leaveRequest.userId === approverId &&
       normalizedStatus === LeaveRequestStatus.CANCELLED;
+      
+    // Check standard authorization if not authorized by custom workflow
+    let isStandardAuthorized = false;
+    let authorizationReason = "Not authorized";
+    
+    if (!isAuthorizedByCustomWorkflow) {
+      try {
+        const authCheck = await approverService.isApproverAuthorized(
+          approverId as string,
+          leaveRequest.userId
+        );
+        isStandardAuthorized = authCheck.isAuthorized;
+        authorizationReason = authCheck.reason || "Not authorized";
+      } catch (error) {
+        logger.error(`Error checking authorization: ${error}`);
+        isStandardAuthorized = false;
+        authorizationReason = "Error checking authorization";
+      }
+    }
 
     // Check if team lead is trying to approve a leave request longer than 2 days
     if (isTeamLead && 
@@ -670,10 +851,10 @@ export const updateLeaveRequestStatus = async (
         leaveRequest.numberOfDays > 2) {
       // For leaves > 2 days, team lead can approve but it will need further approval
       // This will be handled by the multi-level approval workflow
-    } else if (!authorizationCheck.isAuthorized && !isSelfCancellation) {
+    } else if (!isAuthorizedByCustomWorkflow && !isStandardAuthorized && !isSelfCancellation) {
       return h
         .response({
-          message: authorizationCheck.reason || "You are not authorized to update this leave request",
+          message: authorizationReason || "You are not authorized to update this leave request",
         })
         .code(403);
     }
@@ -990,6 +1171,9 @@ export const updateLeaveRequestStatus = async (
             name: applicableWorkflow.name,
             approvalLevels: applicableWorkflow.approvalLevels
           };
+          
+          // Store workflow ID separately
+          metadata.workflowId = applicableWorkflow.id;
         }
 
         metadata.isFullyApproved = true;

@@ -104,6 +104,8 @@ export class LeaveRequest {
       name: string;
       approvalLevels: any[];
     };
+    // Store the workflow ID for reference
+    workflowId?: string;
     // Deletion request metadata
     originalStatus?: string;
     deletionRequestedBy?: string;

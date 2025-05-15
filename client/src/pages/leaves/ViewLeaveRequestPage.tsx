@@ -52,6 +52,40 @@ export default function ViewLeaveRequestPage() {
     // Super admins and admins can approve any request
     if (isSuperAdmin) return true;
     
+    // Check if this is a custom approval workflow with position-based approvers
+    if (leaveRequest?.metadata?.workflowDetails?.approvalLevels) {
+      const approvalLevels = leaveRequest.metadata.workflowDetails.approvalLevels;
+      const currentLevel = isPending ? 1 : 
+                          (isPartiallyApproved && leaveRequest.metadata ? 
+                           leaveRequest.metadata.currentApprovalLevel + 1 : 0);
+      
+      // If we have a valid level to check
+      if (currentLevel > 0) {
+        // Find the approval level definition for this level
+        const levelDefinition = Array.isArray(approvalLevels) ? 
+          approvalLevels.find(level => level.level === currentLevel) : null;
+        
+        if (levelDefinition) {
+          // Check if the current user's position matches the required position for this level
+          const positionMatch = user?.positionId === levelDefinition.positionId;
+          
+          // Log for debugging
+          console.log('Position check:', {
+            userPosition: user?.positionId,
+            requiredPosition: levelDefinition.positionId,
+            match: positionMatch,
+            userApprovalLevel,
+            currentLevel
+          });
+          
+          return positionMatch || 
+                 // Also allow approval based on role for backward compatibility
+                 userApprovalLevel === currentLevel;
+        }
+      }
+    }
+    
+    // Fall back to role-based approval if no custom workflow is defined
     // For pending requests, only L1 approvers can approve
     if (isPending) {
       return userApprovalLevel === 1;
@@ -66,7 +100,7 @@ export default function ViewLeaveRequestPage() {
     }
     
     return false;
-  }, [isPending, isPartiallyApproved, leaveRequest, getApprovalLevel, isSuperAdmin]);
+  }, [isPending, isPartiallyApproved, leaveRequest, getApprovalLevel, isSuperAdmin, user]);
 
   useEffect(() => {
     const fetchLeaveRequest = async () => {
@@ -464,6 +498,7 @@ export default function ViewLeaveRequestPage() {
               <div className="bg-gray-100 p-4 rounded-md mb-4 text-xs">
                 <p><strong>Debug Info:</strong></p>
                 <p>User Role: {user?.role}</p>
+                <p>User Position ID: {user?.positionId || 'None'}</p>
                 <p>User Approval Level: L{getApprovalLevel()}</p>
                 <p>Request Status: {leaveRequest?.status}</p>
                 <p>Is Team Lead: {isTeamLead ? 'Yes' : 'No'}</p>
@@ -477,6 +512,15 @@ export default function ViewLeaveRequestPage() {
                     <p>Current Approval Level: {leaveRequest.metadata.currentApprovalLevel}</p>
                     <p>Next Required Level: {leaveRequest.metadata.currentApprovalLevel + 1}</p>
                     <p>Required Approval Levels: {JSON.stringify(leaveRequest.metadata.requiredApprovalLevels)}</p>
+                    {leaveRequest.metadata.workflowId && (
+                      <p>Custom Workflow ID: {leaveRequest.metadata.workflowId}</p>
+                    )}
+                    {leaveRequest.metadata.workflowDetails && (
+                      <>
+                        <p>Workflow Name: {leaveRequest.metadata.workflowDetails.name}</p>
+                        <p>Workflow Levels: {JSON.stringify(leaveRequest.metadata.workflowDetails.approvalLevels)}</p>
+                      </>
+                    )}
                   </>
                 )}
               </div>

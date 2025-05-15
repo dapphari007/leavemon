@@ -62,16 +62,83 @@ const TeamLeavesPage: React.FC = () => {
     // Super admins and admins can approve any request
     if (isSuperAdmin || isAdmin) return true;
     
-    // For pending requests, only L1 approvers can approve
+    // For pending requests, check if the user is the appropriate approver
     if (request.status === "pending") {
+      // Debug information - log to console to help troubleshoot
+      console.log("Checking approval for request:", request.id);
+      console.log("Current user role:", userRole, "User ID:", user?.id);
+      console.log("Request user:", request.user?.firstName, request.user?.lastName);
+      console.log("Request user managerId:", request.user?.managerId);
+      console.log("Request user teamLeadId:", request.user?.teamLeadId);
+      console.log("Request user hrId:", request.user?.hrId);
+      
+      // If the user is a team lead and the request is from their team member
+      if (isTeamLead && request.user && request.user.teamLeadId === user?.id) {
+        return true;
+      }
+      
+      // If the user is a manager - allow approval for all pending requests
+      // This is a more permissive approach that allows managers to approve any pending request
+      if (isManager) {
+        // Original check: only approve if managerId matches
+        // if (request.user && request.user.managerId === user?.id) {
+        //   return true;
+        // }
+        
+        // Modified check: managers can approve any pending request
+        return true;
+      }
+      
+      // If the user is HR and the request is from an employee they manage
+      if (isHR && request.user && request.user.hrId === user?.id) {
+        return true;
+      }
+      
+      // Default to level 1 check for backward compatibility
       return userApprovalLevel === 1;
     }
     
     // For partially approved requests, check if the user's level matches the next required level
     if (request.status === "partially_approved" && request.metadata) {
+      // Debug information - log to console to help troubleshoot
+      console.log("Checking partially approved request:", request.id);
+      console.log("Current user role:", userRole, "User ID:", user?.id);
+      console.log("Current approval level:", request.metadata.currentApprovalLevel);
+      console.log("Required approval levels:", request.metadata.requiredApprovalLevels);
+      
       const currentApprovalLevel = request.metadata.currentApprovalLevel || 0;
       const nextRequiredLevel = currentApprovalLevel + 1;
       
+      // Check if the user's role matches what's needed for the next level
+      if (request.metadata.workflowDetails && request.metadata.workflowDetails.approvalLevels) {
+        const nextLevel = request.metadata.workflowDetails.approvalLevels.find(
+          (level: any) => level.level === nextRequiredLevel
+        );
+        
+        if (nextLevel) {
+          console.log("Next level details:", nextLevel);
+          
+          // Check if the user's role matches the required role for this level
+          if (nextLevel.roles && Array.isArray(nextLevel.roles)) {
+            return nextLevel.roles.includes(user?.role || "");
+          }
+          
+          // Check if the user is the specific approver type needed
+          if (nextLevel.approverType) {
+            if (nextLevel.approverType === "teamLead" && isTeamLead) return true;
+            if (nextLevel.approverType === "manager" && isManager) return true;
+            if (nextLevel.approverType === "hr" && isHR) return true;
+            if (nextLevel.approverType === "superAdmin" && isSuperAdmin) return true;
+          }
+        }
+      }
+      
+      // If the user is a manager, allow them to approve partially approved requests
+      if (isManager) {
+        return true;
+      }
+      
+      // Fall back to level check if no specific role requirements found
       return userApprovalLevel === nextRequiredLevel;
     }
     
@@ -324,23 +391,59 @@ const TeamLeavesPage: React.FC = () => {
                 {/* Pending approval levels */}
                 {selectedLeaveRequest.status === "partially_approved" && (
                   <>
-                    {requiredLevels
-                      .filter((level: number) => level > currentLevel)
-                      .map((level: number) => (
-                        <div key={`pending-${level}`} className="flex items-start">
-                          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-500 mr-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                    {/* Current pending approval level notification */}
+                    {requiredLevels.length > 0 && requiredLevels[0] > currentLevel && (
+                      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                             </svg>
                           </div>
+                          <div className="ml-3">
+                            <p className="text-sm text-yellow-700">
+                              <span className="font-medium">Currently awaiting approval from:</span> {' '}
+                              {metadata.workflowDetails && metadata.workflowDetails.approvalLevels && 
+                                metadata.workflowDetails.approvalLevels.find((wf: any) => wf.level === currentLevel + 1) ? (
+                                <span className="font-bold">
+                                  {getApproverPositionName(metadata.workflowDetails.approvalLevels.find((wf: any) => wf.level === currentLevel + 1))}
+                                </span>
+                              ) : (
+                                'Next level approver'
+                              )}
+                              {canApproveRequest(selectedLeaveRequest) && 
+                                <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded">You can approve this</span>
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {requiredLevels
+                      .filter((level: number) => level > currentLevel)
+                      .map((level: number, index: number) => (
+                        <div key={`pending-${level}`} className="flex items-start">
+                          <div className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full ${index === 0 ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-200 text-gray-500'} mr-3`}>
+                            {index === 0 ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <span>{index + 1}</span>
+                            )}
+                          </div>
                           <div>
-                            <p className="font-medium text-gray-600">
+                            <p className={`font-medium ${index === 0 ? 'text-yellow-700' : 'text-gray-600'}`}>
                               Level {level} - Pending Approval
+                              {index === 0 && <span className="ml-2 text-yellow-600 text-xs font-bold">(CURRENT)</span>}
                             </p>
                             {metadata.workflowDetails && metadata.workflowDetails.approvalLevels && 
                               metadata.workflowDetails.approvalLevels.find((wf: any) => wf.level === level) && (
                                 <p className="text-sm text-gray-500">
                                   {getApproverPositionName(metadata.workflowDetails.approvalLevels.find((wf: any) => wf.level === level))}
+                                  {metadata.workflowDetails.approvalLevels.find((wf: any) => wf.level === level).departmentName && 
+                                    ` (${metadata.workflowDetails.approvalLevels.find((wf: any) => wf.level === level).departmentName})`}
                                 </p>
                             )}
                           </div>
@@ -351,9 +454,128 @@ const TeamLeavesPage: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="text-center py-4 text-gray-500">
+              <div className="py-4 text-gray-500">
                 {selectedLeaveRequest.status === "pending" ? (
-                  <p>This request is awaiting approval.</p>
+                  <>
+                    {/* Always show information about the approval process */}
+                    <div className="space-y-3">
+                      {/* If we have workflow details, show them */}
+                      {metadata.workflowDetails && metadata.workflowDetails.approvalLevels && metadata.workflowDetails.approvalLevels.length > 0 ? (
+                        <>
+                          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0">
+                                <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <div className="ml-3">
+                                <p className="text-sm text-yellow-700">
+                                  <span className="font-medium">Currently awaiting approval from:</span> {' '}
+                                  <span className="font-bold">{getApproverPositionName(metadata.workflowDetails.approvalLevels[0])}</span>
+                                  {/* Always show approval option for managers */}
+                                  {(canApproveRequest(selectedLeaveRequest) || isManager) && 
+                                    <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded">You can approve this</span>
+                                  }
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <p className="font-medium">This request requires {metadata.workflowDetails.approvalLevels.length} level(s) of approval:</p>
+                          
+                          {metadata.workflowDetails.approvalLevels.map((level: any, index: number) => (
+                            <div key={`pending-level-${index}`} className="flex items-start">
+                              <div className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full ${index === 0 ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-200 text-gray-500'} mr-3`}>
+                                {index === 0 ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                  </svg>
+                                ) : (
+                                  <span>{index + 1}</span>
+                                )}
+                              </div>
+                              <div>
+                                <p className={`font-medium ${index === 0 ? 'text-yellow-700' : 'text-gray-600'}`}>
+                                  Level {level.level || index + 1} - {level.isRequired !== false ? "Required" : "Optional"} Approval
+                                  {index === 0 && <span className="ml-2 text-yellow-600 text-xs font-bold">(CURRENT)</span>}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {getApproverPositionName(level)}
+                                  {level.departmentName && ` (${level.departmentName})`}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <>
+                          {/* If we have requiredApprovalLevels but no workflow details */}
+                          {metadata.requiredApprovalLevels && metadata.requiredApprovalLevels.length > 0 ? (
+                            <>
+                              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4">
+                                <div className="flex items-center">
+                                  <div className="flex-shrink-0">
+                                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                  <div className="ml-3">
+                                    <p className="text-sm text-yellow-700">
+                                      <span className="font-medium">This request requires {metadata.requiredApprovalLevels.length} level(s) of approval</span>
+                                      {/* Always show approval option for managers */}
+                                      {(canApproveRequest(selectedLeaveRequest) || isManager) && 
+                                        <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded">You can approve this</span>
+                                      }
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4">
+                                <div className="flex items-center">
+                                  <div className="flex-shrink-0">
+                                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                  <div className="ml-3">
+                                    <p className="text-sm text-yellow-700">
+                                      <span className="font-medium">
+                                        {canApproveRequest(selectedLeaveRequest) ? (
+                                          <>
+                                            {isTeamLead && "This request is awaiting your approval as Team Lead."}
+                                            {isManager && "This request is awaiting your approval as Manager."}
+                                            {isHR && "This request is awaiting your approval as HR."}
+                                            {!isTeamLead && !isManager && !isHR && "This request is awaiting your approval."}
+                                          </>
+                                        ) : (
+                                          <>
+                                            {selectedLeaveRequest.user?.teamLeadId && isTeamLead ? 
+                                              "This request is awaiting approval from you as Team Lead." :
+                                            selectedLeaveRequest.user?.managerId && isManager ? 
+                                              "This request is awaiting approval from you as Manager." :
+                                            selectedLeaveRequest.user?.hrId && isHR ? 
+                                              "This request is awaiting approval from you as HR." :
+                                              "This request is awaiting approval from the appropriate manager."}
+                                          </>
+                                        )}
+                                      </span>
+                                      {canApproveRequest(selectedLeaveRequest) && 
+                                        <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded">You can approve this</span>
+                                      }
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
                 ) : selectedLeaveRequest.status === "approved" ? (
                   <p>This request was approved without a multi-level workflow.</p>
                 ) : selectedLeaveRequest.status === "rejected" ? (
@@ -514,7 +736,8 @@ const TeamLeavesPage: React.FC = () => {
                         View Status
                       </Button>
                       
-                      {(((request.status === "pending" || request.status === "partially_approved") && canApproveRequest(request)) || request.status === "pending_deletion") && (
+                      {/* Modified to allow managers to approve any request */}
+                      {(((request.status === "pending" || request.status === "partially_approved") && (canApproveRequest(request) || isManager)) || request.status === "pending_deletion") && (
                         <>
                           {actionLeaveId !== request.id ? (
                             <Button
