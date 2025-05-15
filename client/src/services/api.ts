@@ -12,6 +12,9 @@ const api = axios.create({
 // Add a request interceptor to add the auth token to every request
 api.interceptors.request.use(
   (config) => {
+    console.log("API Request:", config.method?.toUpperCase(), config.url);
+    console.log("Request Data:", config.data);
+    
     const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -19,6 +22,7 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    console.error("Request Error:", error);
     return Promise.reject(error);
   }
 );
@@ -26,9 +30,14 @@ api.interceptors.request.use(
 // Add a response interceptor to handle errors
 api.interceptors.response.use(
   (response) => {
+    console.log("API Response:", response);
     return response;
   },
   (error: AxiosError) => {
+    console.error("API Error:", error);
+    console.error("Error Response:", error.response?.data);
+    console.error("Error Status:", error.response?.status);
+    
     // Handle 401 Unauthorized errors (token expired or invalid)
     if (error.response?.status === 401) {
       // Clear local storage and redirect to login
@@ -36,6 +45,7 @@ api.interceptors.response.use(
       localStorage.removeItem("user");
       window.location.href = "/login";
     }
+    
     return Promise.reject(error);
   }
 );

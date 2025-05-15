@@ -42,7 +42,7 @@ export default function CreateCustomApprovalWorkflowPage() {
     defaultValues: {
       name: "",
       description: "",
-      category: "short_leave", // For backward compatibility
+      category: "custom", // For backward compatibility
       leaveCategoryId: "",
       minDays: 0.5,
       maxDays: 2,
@@ -52,6 +52,7 @@ export default function CreateCustomApprovalWorkflowPage() {
       isDefault: false,
       approvalLevels: [{ level: 1, positionId: "", departmentId: "", isRequired: true }],
     },
+    mode: "onSubmit",
   });
 
   const watchApprovalLevels = watch("approvalLevels");
@@ -149,11 +150,16 @@ export default function CreateCustomApprovalWorkflowPage() {
   }, [watchDepartmentId, setValue, watchApprovalLevels, refetchAssignedPositions]);
 
   const createMutation = useMutation({
-    mutationFn: createCustomApprovalWorkflow,
-    onSuccess: () => {
+    mutationFn: (data: any) => {
+      console.log("Mutation function called with data:", data);
+      return createCustomApprovalWorkflow(data);
+    },
+    onSuccess: (data) => {
+      console.log("Mutation success callback with data:", data);
       navigate("/approval-workflow-customization");
     },
     onError: (err: any) => {
+      console.error("Mutation error callback with error:", err);
       setError(
         err.response?.data?.message || "Failed to create custom approval workflow"
       );
@@ -161,25 +167,44 @@ export default function CreateCustomApprovalWorkflowPage() {
   });
 
   const onSubmit = (data: FormValues) => {
+    console.log("Form submitted with data:", data);
+    
+    // Validate that at least one approval level is added
+    if (!data.approvalLevels || data.approvalLevels.length === 0) {
+      setError("At least one approval level is required");
+      return;
+    }
+    
+    // Validate that all approval levels have a position selected
+    const invalidLevels = data.approvalLevels.filter(level => !level.positionId);
+    if (invalidLevels.length > 0) {
+      setError(`Please select a position for all approval levels`);
+      return;
+    }
+    
     // Ensure approval levels are properly ordered
     const formattedApprovalLevels = data.approvalLevels.map((level, index) => ({
       ...level,
       level: index + 1,
     }));
 
-    createMutation.mutate({
+    const payload = {
       name: data.name,
       description: data.description,
-      category: data.category, // Keep for backward compatibility
+      category: data.category || "custom", // Keep for backward compatibility
       leaveCategoryId: data.leaveCategoryId || null,
-      minDays: data.minDays,
-      maxDays: data.maxDays,
+      minDays: Number(data.minDays),
+      maxDays: Number(data.maxDays),
       departmentId: data.departmentId || null,
       positionId: data.positionId || null,
       approvalLevels: formattedApprovalLevels,
-      isActive: data.isActive,
-      isDefault: data.isDefault,
-    });
+      isActive: Boolean(data.isActive),
+      isDefault: Boolean(data.isDefault),
+    };
+    
+    console.log("Sending payload to server:", payload);
+    
+    createMutation.mutate(payload);
   };
 
   const addApprovalLevel = () => {
@@ -575,6 +600,36 @@ export default function CreateCustomApprovalWorkflowPage() {
             className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
           >
             Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const formData = {
+                name: "Test Workflow",
+                description: "Test Description",
+                category: "custom",
+                leaveCategoryId: document.querySelector('select[name="leaveCategoryId"]')?.value,
+                minDays: 0.5,
+                maxDays: 2,
+                departmentId: document.querySelector('select[name="departmentId"]')?.value,
+                positionId: document.querySelector('select[name="positionId"]')?.value,
+                approvalLevels: [
+                  {
+                    level: 1,
+                    positionId: document.querySelector('select[name="approvalLevels.0.positionId"]')?.value,
+                    departmentId: document.querySelector('select[name="approvalLevels.0.departmentId"]')?.value,
+                    isRequired: true
+                  }
+                ],
+                isActive: true,
+                isDefault: false
+              };
+              console.log("Debug form data:", formData);
+              createMutation.mutate(formData);
+            }}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded mr-2"
+          >
+            Debug Save
           </button>
           <button
             type="submit"
